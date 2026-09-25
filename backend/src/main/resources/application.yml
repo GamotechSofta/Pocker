@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: poker-backend
+  profiles:
+    default: dev
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017/poker}
+    representation:
+      uuid: standard
+  data:
+    mongodb:
+      auto-index-creation: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  info:
+    env:
+      enabled: true
+  health:
+    mongo:
+      enabled: true
+
+info:
+  app:
+    name: poker-backend
+    description: Play-money poker game API
+    phase: 20
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:local-dev-only-change-me-use-32b-min-secret}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  table:
+    small-blind: ${SMALL_BLIND:10}
+    big-blind: ${BIG_BLIND:20}
+    starting-chips: ${STARTING_CHIPS:1000}
+    max-players: ${MAX_PLAYERS:6}
+    max-draw-count: ${MAX_DRAW_COUNT:5}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  show-actuator: false
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{40} - %msg%n"

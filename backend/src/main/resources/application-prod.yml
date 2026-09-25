@@ -1,0 +1,15 @@
+logging:
+  level:
+    root: INFO
+    com.poker: INFO
+
+management:
+  endpoint:
+    health:
+      show-details: when_authorized
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

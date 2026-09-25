@@ -1,0 +1,5 @@
+logging:
+  level:
+    root: INFO
+    com.poker: INFO
+    org.testcontainers: INFO

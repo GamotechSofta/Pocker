@@ -1,0 +1,19 @@
+package com.poker.websocket;
+
+public enum WsEventType {
+    GAME_STATE,
+    PLAYER_JOINED,
+    PLAYER_LEFT,
+    HAND_STARTED,
+    CARDS_DEALT,
+    BETTING_STARTED,
+    PLAYER_ACTION,
+    COMMUNITY_CARDS,
+    TURN_CHANGED,
+    SHOWDOWN,
+    POT_AWARDED,
+    HAND_COMPLETED,
+    PLAYER_DISCONNECTED,
+    PLAYER_RECONNECTED,
+    ERROR
+}
