@@ -27,6 +27,8 @@ import com.poker.repository.PokerTableRepository;
 import com.poker.repository.UserRepository;
 import com.poker.websocket.TableUpdatedEvent;
 import com.poker.websocket.WsEventType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +43,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 @Service
 public class TableService {
 
+    private static final Logger log = LoggerFactory.getLogger(TableService.class);
     private static final int MAX_PROCESSED_REQUEST_IDS = 10_000;
 
     private final PokerTableRepository tableRepository;
@@ -122,8 +125,12 @@ public class TableService {
             if (findSeated(table, userId).isPresent()) {
                 throw new InvalidGameActionException("You are already seated at this table.");
             }
-            if (tableRepository.existsByPlayersUserId(userId)) {
-                throw new InvalidGameActionException("You are already seated at another table.");
+            var otherTableId = seatedTableId(userId);
+            if (otherTableId.isPresent() && !otherTableId.get().equals(tableId)) {
+                try {
+                    leaveTable(otherTableId.get(), userId);
+                } catch (RuntimeException ignored) {
+                }
             }
 
             TexasHoldemEngine engine = engineFor(table);
@@ -173,6 +180,37 @@ public class TableService {
             TableStateResponse state = TableMapper.toSanitizedState(table, engine, userId);
             publish(tableId, WsEventType.HAND_STARTED);
             return state;
+        }
+    }
+
+    public boolean maybeStartNextHand(UUID tableId) {
+        synchronized (lockFor(tableId)) {
+            PokerTable table = tableRepository.findById(tableId).orElse(null);
+            if (table == null) {
+                return false;
+            }
+            TexasHoldemEngine engine = engineFor(table);
+            GameStatus status = engine.state().getStatus();
+            if (status != GameStatus.WAITING && status != GameStatus.NEXT_HAND) {
+                return false;
+            }
+            removeDepartedEnginePlayers(table, engine);
+            if (engine.state().getPlayers().size() < 2) {
+                engine.state().setStatus(GameStatus.WAITING);
+                syncStatusAndStacks(table, engine);
+                tableRepository.save(table);
+                return false;
+            }
+            try {
+                engine.startHand();
+                syncStatusAndStacks(table, engine);
+                tableRepository.save(table);
+                publish(tableId, WsEventType.HAND_STARTED);
+                return true;
+            } catch (RuntimeException ex) {
+                log.debug("Auto-start next hand skipped for {}: {}", tableId, ex.getMessage());
+                return false;
+            }
         }
     }
 

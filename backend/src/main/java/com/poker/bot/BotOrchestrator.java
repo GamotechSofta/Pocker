@@ -24,7 +24,7 @@ public class BotOrchestrator {
     private static final long ACT_DELAY_MIN_MS = 1_800;
     private static final long ACT_DELAY_MAX_MS = 3_200;
     /** Hold the finished hand on screen so win/lose can be seen before next deal. */
-    private static final long RESULT_HOLD_MS = 5_500;
+    private static final long RESULT_HOLD_MS = 4_500;
 
     private final BotService botService;
     private final TaskScheduler taskScheduler;

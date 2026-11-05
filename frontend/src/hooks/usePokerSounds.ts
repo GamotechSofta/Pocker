@@ -64,26 +64,66 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
   const contextRef = useRef<AudioContext | null>(null)
   const unlockedRef = useRef(false)
   const previousEventCountRef = useRef<number | null>(null)
+  const activeAudiosRef = useRef<Set<HTMLAudioElement>>(new Set())
+  const activeTimersRef = useRef<Set<number>>(new Set())
+  const isMountedRef = useRef(true)
 
   const getContext = useCallback(() => {
-    if (typeof window === 'undefined' || !('AudioContext' in window)) {
+    if (typeof window === 'undefined' || !('AudioContext' in window) || !isMountedRef.current) {
       return null
     }
     contextRef.current ??= new AudioContext()
     return contextRef.current
   }, [])
 
+  const stopAllSounds = useCallback(() => {
+    activeAudiosRef.current.forEach((audio) => {
+      try {
+        audio.pause()
+        audio.currentTime = 0
+        audio.src = ''
+      } catch {
+        // ignore
+      }
+    })
+    activeAudiosRef.current.clear()
+
+    activeTimersRef.current.forEach((timer) => {
+      window.clearTimeout(timer)
+    })
+    activeTimersRef.current.clear()
+
+    if (contextRef.current && contextRef.current.state !== 'closed') {
+      void contextRef.current.close().catch(() => {})
+      contextRef.current = null
+    }
+  }, [])
+
   const play = useCallback((sound: PokerSound) => {
-    if (!enabled || !unlockedRef.current) {
+    if (!enabled || !unlockedRef.current || !isMountedRef.current) {
       return
     }
     const asset = SOUND_ASSETS[sound]
     if (asset) {
       const audio = new Audio(asset)
       audio.volume = volumeFor(sound)
+      activeAudiosRef.current.add(audio)
+      const cleanup = () => {
+        activeAudiosRef.current.delete(audio)
+        audio.removeEventListener('ended', cleanup)
+        audio.removeEventListener('pause', cleanup)
+        audio.removeEventListener('error', cleanup)
+      }
+      audio.addEventListener('ended', cleanup)
+      audio.addEventListener('pause', cleanup)
+      audio.addEventListener('error', cleanup)
+
       void audio.play().catch(() => {
-        const context = getContext()
-        if (context) playPokerSound(context, sound)
+        cleanup()
+        if (isMountedRef.current) {
+          const context = getContext()
+          if (context) playPokerSound(context, sound)
+        }
       })
       return
     }
@@ -98,6 +138,7 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
   }, [enabled, getContext])
 
   useEffect(() => {
+    isMountedRef.current = true
     const unlock = () => {
       const context = getContext()
       if (!context) {
@@ -111,10 +152,12 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
     window.addEventListener('pointerdown', unlock, { once: true })
     window.addEventListener('keydown', unlock, { once: true })
     return () => {
+      isMountedRef.current = false
       window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('keydown', unlock)
+      stopAllSounds()
     }
-  }, [getContext])
+  }, [getContext, stopAllSounds])
 
   useEffect(() => {
     if (previousEventCountRef.current === null) {
@@ -154,30 +197,42 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
       payoutHandled = true
       return [viewerWonPayout ? 'win' as const : 'lose' as const]
     })
-    const timers = sounds.map((sound, index) => window.setTimeout(
-      () => play(sound),
-      index * 160,
-    ))
-    return () => timers.forEach((timer) => window.clearTimeout(timer))
+    const timers = sounds.map((sound, index) => {
+      const timer = window.setTimeout(() => {
+        activeTimersRef.current.delete(timer)
+        play(sound)
+      }, index * 160)
+      activeTimersRef.current.add(timer)
+      return timer
+    })
+    return () => timers.forEach((timer) => {
+      activeTimersRef.current.delete(timer)
+      window.clearTimeout(timer)
+    })
   }, [events, play, result, viewerUsername])
 
   useEffect(() => {
     if (!result) {
       return
     }
-    const timer = window.setTimeout(() => play(result.outcome), 180)
-    return () => window.clearTimeout(timer)
+    const timer = window.setTimeout(() => {
+      activeTimersRef.current.delete(timer)
+      play(result.outcome)
+    }, 180)
+    activeTimersRef.current.add(timer)
+    return () => {
+      activeTimersRef.current.delete(timer)
+      window.clearTimeout(timer)
+    }
   }, [play, result?.key, result?.outcome])
-
-  useEffect(() => () => {
-    void contextRef.current?.close()
-  }, [])
 
   const toggle = useCallback(() => {
     setEnabled((current) => {
       const next = !current
       window.localStorage.setItem(SOUND_STORAGE_KEY, String(next))
-      if (next) {
+      if (!next) {
+        stopAllSounds()
+      } else {
         const context = getContext()
         if (context) {
           unlockedRef.current = true
@@ -187,9 +242,9 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
       }
       return next
     })
-  }, [getContext])
+  }, [getContext, stopAllSounds])
 
-  return { soundEnabled: enabled, toggleSound: toggle, playSound: play }
+  return { soundEnabled: enabled, toggleSound: toggle, playSound: play, stopAllSounds }
 }
 
 function soundForEvent(event: GameEvent, viewerUsername?: string): PokerSound | null {

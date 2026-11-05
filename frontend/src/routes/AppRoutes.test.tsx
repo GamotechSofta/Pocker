@@ -50,7 +50,7 @@ describe('app routes without login', () => {
 
   it('shows variants on home after silent guest session', async () => {
     renderPath('/')
-    expect(await screen.findByRole('heading', { name: /choose a variant/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /select your poker game/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /texas hold'em/i })).toBeInTheDocument()
     expect(guestMock).toHaveBeenCalled()
     expect(screen.queryByRole('link', { name: /^login$/i })).not.toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('app routes without login', () => {
 
   it('redirects old login and register paths to home', async () => {
     renderPath('/login')
-    expect(await screen.findByRole('heading', { name: /choose a variant/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /select your poker game/i })).toBeInTheDocument()
   })
 
   it('opens lobby without a login gate', async () => {
@@ -66,3 +66,4 @@ describe('app routes without login', () => {
     expect(await screen.findByRole('heading', { name: 'Lobby' })).toBeInTheDocument()
   })
 })
+

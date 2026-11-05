@@ -6,6 +6,7 @@ import { connectionLabel } from '@/components/table/ConnectionBanner'
 import { GameLog } from '@/components/table/GameLog'
 import { PokerTable } from '@/components/table/PokerTable'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { formatStreet, formatVariant, isHandIdle, TABLE_DEFAULTS } from '@/constants/table'
 import { paths } from '@/constants/paths'
 import { useAuth } from '@/hooks/useAuth'
@@ -37,11 +38,25 @@ export function GamePage() {
   const [sending, setSending] = useState(false)
   const [dealingCards, setDealingCards] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false)
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement))
   const [, setError] = useState<string | null>(null)
   const alive = useRef(true)
   const leaveRequested = useRef(false)
   const seatedRef = useRef(false)
+
+  const viewer = state?.players.find((player) => player.playerId === user?.id)
+  const resultSound = state && viewer && state.payouts.length > 0
+    ? {
+        key: `${state.handNumber}:${state.payouts.map((payout) => `${payout.playerId}-${payout.amount}`).join(',')}`,
+        outcome: new Set(state.payouts.map((payout) => payout.playerId)).size > 1
+          ? 'pot-split' as const
+          : state.payouts.some((payout) => payout.playerId === viewer.playerId)
+            ? 'win' as const
+            : 'lose' as const,
+      }
+    : undefined
+  const { soundEnabled, toggleSound, playSound, stopAllSounds } = usePokerSounds(state?.events ?? [], user?.username, resultSound)
 
   const load = useCallback(async (quiet = false) => {
     setError(null)
@@ -85,10 +100,11 @@ export function GamePage() {
     })
     return () => {
       alive.current = false
+      stopAllSounds()
       disconnect()
       resetGame()
     }
-  }, [connect, disconnect, gameId, load, resetGame])
+  }, [connect, disconnect, gameId, load, resetGame, stopAllSounds])
 
   const maxPlayers = table?.maxPlayers ?? TABLE_DEFAULTS.maxPlayers
   const seated = Boolean(
@@ -101,19 +117,7 @@ export function GamePage() {
   const canLeave = seated && idle
   const canJoin = !seated && idle && playerCount < maxPlayers
   seatedRef.current = seated
-  const viewer = state?.players.find((player) => player.playerId === user?.id)
   const actor = state?.players.find((player) => player.isTurn)
-  const resultSound = state && viewer && state.payouts.length > 0
-    ? {
-        key: `${state.handNumber}:${state.payouts.map((payout) => `${payout.playerId}-${payout.amount}`).join(',')}`,
-        outcome: new Set(state.payouts.map((payout) => payout.playerId)).size > 1
-          ? 'pot-split' as const
-          : state.payouts.some((payout) => payout.playerId === viewer.playerId)
-            ? 'win' as const
-            : 'lose' as const,
-      }
-    : undefined
-  const { soundEnabled, toggleSound, playSound } = usePokerSounds(state?.events ?? [], user?.username, resultSound)
 
   useEffect(() => {
     const leaveOnPageHide = () => {
@@ -197,8 +201,9 @@ export function GamePage() {
   }
 
   async function onLeave() {
+    stopAllSounds()
     if (!seated) {
-      navigate(paths.lobby)
+      navigate(paths.home)
       return
     }
     leaveRequested.current = true
@@ -207,7 +212,7 @@ export function GamePage() {
     try {
       const detail = await leaveTable(gameId)
       upsertTable(detail)
-      navigate(paths.lobby)
+      navigate(paths.home)
     } catch (cause: unknown) {
       leaveRequested.current = false
       setError(apiErrorMessage(cause))
@@ -216,6 +221,7 @@ export function GamePage() {
   }
 
   async function onExitGame() {
+    stopAllSounds()
     leaveRequested.current = true
     setBusy(true)
     setError(null)
@@ -230,7 +236,7 @@ export function GamePage() {
     } finally {
       setCurrentTable(null)
       resetGame()
-      navigate(paths.lobby, { replace: true })
+      navigate(paths.home, { replace: true })
       setBusy(false)
     }
   }
@@ -315,16 +321,13 @@ export function GamePage() {
           <button className="game-hud-button" type="button" onClick={() => setHistoryOpen((open) => !open)}>
             History
           </button>
-          <button className="game-hud-button" type="button" onClick={() => void onLeave()}>
-            Lobby
-          </button>
           <button
             className="game-hud-button game-hud-button--exit"
             type="button"
             disabled={busy}
-            onClick={() => void onExitGame()}
+            onClick={() => setLeaveModalOpen(true)}
           >
-            Exit game
+            Leave Table
           </button>
           <button className="game-hud-button" type="button" disabled={loading} onClick={() => void load()}>
             Refresh
@@ -340,21 +343,6 @@ export function GamePage() {
           >
             {soundEnabled ? 'Sound on' : 'Sound off'}
           </button>
-          {canJoin ? (
-            <Button className="!rounded-full !px-2.5 !py-1 !text-[10px]" disabled={busy} onClick={() => void onJoin()}>
-              Join
-            </Button>
-          ) : null}
-          {canLeave ? (
-            <Button className="!rounded-full !bg-black/55 !px-2.5 !py-1 !text-[10px]" variant="ghost" disabled={busy} onClick={() => void onLeave()}>
-              Leave
-            </Button>
-          ) : null}
-          {canStart ? (
-            <Button className="!rounded-full !px-2.5 !py-1 !text-[10px]" disabled={busy} onClick={() => void onStart()}>
-              {state?.status === 'NEXT_HAND' ? 'Next hand' : 'Start hand'}
-            </Button>
-          ) : null}
           {connectionStatus === 'disconnected' || connectionStatus === 'error' ? (
             <Button className="!rounded-full !bg-amber-700/80 !px-2.5 !py-1 !text-[10px]" variant="ghost" onClick={() => void onReconnect()}>
               Reconnect
@@ -401,6 +389,38 @@ export function GamePage() {
         </div>
       </div>
 
+      <Modal
+        title="Leave this table?"
+        open={leaveModalOpen}
+        onClose={() => setLeaveModalOpen(false)}
+      >
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-emerald-100/80">
+            If you leave during an active hand, your hand will be folded and chips already committed to the pot will not be returned.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setLeaveModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={busy}
+              onClick={() => {
+                setLeaveModalOpen(false)
+                void onExitGame()
+              }}
+            >
+              Leave Table
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </main>
   )
 }

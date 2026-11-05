@@ -134,8 +134,8 @@ export function ActionPanel({
       ) : idle ? (
         <p className={`text-emerald-100/80 ${compact ? 'mt-1 text-xs' : 'mt-3 text-sm'}`}>
           {complete
-            ? 'This hand is over. Deal the next hand when everyone is ready.'
-            : 'The hand has not started. Legal actions will appear here.'}
+            ? 'This hand is over. Next hand starting automatically…'
+            : 'The hand has not started. Waiting for players…'}
         </p>
       ) : isDiscard && drawMode ? (
         <div className={compact ? 'mt-1.5' : 'mt-3'}>

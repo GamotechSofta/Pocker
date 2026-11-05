@@ -77,6 +77,7 @@ public class BotService {
 
         if (humans >= 2) {
             removeBotsIfIdle(tableId, seated);
+            maybeAutoStart(tableId);
             return;
         }
         if (humans == 0) {
@@ -191,31 +192,8 @@ public class BotService {
         }
     }
 
-    private void maybeAutoStart(UUID tableId) {
-        PokerTable table = tableRepository.findById(tableId).orElse(null);
-        if (table == null || table.getPlayers().size() < 2) {
-            return;
-        }
-        TexasHoldemEngine engine;
-        try {
-            engine = tableService.engineSnapshot(tableId);
-        } catch (RuntimeException ex) {
-            return;
-        }
-        GameStatus status = engine.state().getStatus();
-        if (status != GameStatus.WAITING && status != GameStatus.NEXT_HAND) {
-            return;
-        }
-        UUID starter = table.getPlayers().stream()
-                .filter(player -> !isBot(player))
-                .map(PokerTablePlayer::getUserId)
-                .findFirst()
-                .orElse(table.getPlayers().getFirst().getUserId());
-        try {
-            tableService.startTable(tableId, starter);
-        } catch (RuntimeException ex) {
-            log.debug("Auto-start skipped for {}: {}", tableId, ex.getMessage());
-        }
+    public void maybeAutoStart(UUID tableId) {
+        tableService.maybeStartNextHand(tableId);
     }
 
     private User acquireBotUser() {

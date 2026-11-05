@@ -243,7 +243,7 @@ describe('GamePage', () => {
     expect(screen.getByTitle('Seat 2 empty')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Start hand' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Lobby' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Leave Table' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Full screen' })).toBeInTheDocument()
     expect(screen.getByText(/hand has not started/i)).toBeInTheDocument()
@@ -532,41 +532,39 @@ describe('GamePage', () => {
     expect(screen.queryByRole('button', { name: 'Fold' })).not.toBeInTheDocument()
   })
 
-  it('starts a hand when two players are seated', async () => {
+  it('shows confirmation modal and allows cancelling leave table', async () => {
     const user = userEvent.setup()
-    const twoWaiting: TableState = {
-      ...waitingState(),
-      players: [
-        player({ playerId: userId, username: 'player1', seat: 0 }),
-        player({ playerId: otherId, username: 'player2', seat: 1 }),
-      ],
-    }
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 1000 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 1000 },
-      ],
-    })
-    getStateMock.mockResolvedValue(twoWaiting)
-    startMock.mockResolvedValue(playingState())
+    getTableMock.mockResolvedValue(waitingTable())
+    getStateMock.mockResolvedValue(waitingState())
     renderGame()
-    await screen.findByRole('button', { name: 'Start hand' })
-    await user.click(screen.getByRole('button', { name: 'Start hand' }))
-    expect(startMock).toHaveBeenCalledWith('t1')
-    expect(await screen.findByRole('img', { name: 'Ace of spades' })).toBeInTheDocument()
+    await screen.findByRole('button', { name: 'Leave Table' })
+    await user.click(screen.getByRole('button', { name: 'Leave Table' }))
+    expect(await screen.findByRole('heading', { name: 'Leave this table?' })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'If you leave during an active hand, your hand will be folded and chips already committed to the pot will not be returned.',
+      ),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('heading', { name: 'Leave this table?' })).not.toBeInTheDocument()
+    expect(leaveMock).not.toHaveBeenCalled()
   })
 
-  it('leaves a waiting table and returns to the lobby', async () => {
+  it('leaves a table and returns to the home screen when confirmed via Leave Table modal', async () => {
     const user = userEvent.setup()
     getTableMock.mockResolvedValue(waitingTable())
     getStateMock.mockResolvedValue(waitingState())
     leaveMock.mockResolvedValue({ ...waitingTable(), players: [] })
     renderGame()
-    await screen.findByRole('button', { name: 'Leave' })
-    await user.click(screen.getByRole('button', { name: 'Leave' }))
+    await screen.findByRole('button', { name: 'Leave Table' })
+    await user.click(screen.getByRole('button', { name: 'Leave Table' }))
+    expect(await screen.findByRole('heading', { name: 'Leave this table?' })).toBeInTheDocument()
+    // Click the confirm "Leave Table" button inside the modal dialog
+    const modal = screen.getByRole('dialog', { name: 'Leave this table?' })
+    const confirmButton = modal.querySelector('button.bg-rose-700') as HTMLElement
+    await user.click(confirmButton)
     expect(leaveMock).toHaveBeenCalledWith('t1')
-    expect(await screen.findByRole('heading', { name: 'Lobby' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /select your poker game/i })).toBeInTheDocument()
   })
 
   it('shows showdown ranks, revealed cards, and the backend winner', async () => {
@@ -587,12 +585,10 @@ describe('GamePage', () => {
     expect(screen.getAllByRole('img', { name: 'Ace of spades' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('img', { name: 'King of diamonds' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('img', { name: 'Facedown card' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Next hand' })).toBeInTheDocument()
     expect(screen.getByText(/this hand is over/i)).toBeInTheDocument()
   })
 
   it('announces an uncontested fold win from payouts', async () => {
-    const user = userEvent.setup()
     getTableMock.mockResolvedValue({
       ...waitingTable(),
       players: [
@@ -630,8 +626,6 @@ describe('GamePage', () => {
     renderGame()
     expect(await screen.findByText('You win!')).toBeInTheDocument()
     expect(screen.getByText(/uncontested .+ \+30 chips/i)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Next hand' }))
-    expect(startMock).toHaveBeenCalledWith('t1')
   })
 
   it('shows reconnecting status in the header while the socket retries', async () => {

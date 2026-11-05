@@ -3,12 +3,6 @@ import { paths } from '@/constants/paths'
 import { useAuth } from '@/hooks/useAuth'
 import { useSessionReady } from '@/hooks/useSessionReady'
 
-const linkClass = ({ isActive }: { isActive: boolean }) =>
-  [
-    'rounded-md px-3 py-2 text-sm transition',
-    isActive ? 'bg-emerald-800/80 text-emerald-50' : 'text-emerald-200/80 hover:bg-emerald-950/80 hover:text-emerald-50',
-  ].join(' ')
-
 export function AppLayout() {
   const ready = useSessionReady()
   const { user } = useAuth()
@@ -32,31 +26,29 @@ export function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="shrink-0 border-b border-emerald-900/60 bg-black/20">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
-          <NavLink to={paths.home} end className="text-sm font-semibold tracking-wide text-emerald-300">
-            Play-money poker
+    <div className="min-h-screen bg-[#07130e] text-emerald-50">
+      <header className="shrink-0 border-b border-emerald-900/60 bg-black/40 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <NavLink to={paths.home} className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400 font-bold text-emerald-950">
+              ♠
+            </span>
+            <span className="text-base font-bold tracking-tight text-white sm:text-lg">
+              Poker Lounge
+            </span>
           </NavLink>
-          <nav className="flex flex-wrap items-center gap-0.5 sm:gap-1">
-            <NavLink to={paths.home} className={linkClass} end>
-              Variants
-            </NavLink>
-            <NavLink to={paths.lobby} className={linkClass}>
-              Lobby
-            </NavLink>
-            {user ? (
-              <span
-                className="max-w-[8rem] truncate px-2 py-2 text-xs text-emerald-200/60 sm:max-w-[12rem] sm:px-3 sm:text-sm"
-                title="Guest / embed session"
-              >
+          {user ? (
+            <div className="flex items-center gap-2 rounded-full border border-emerald-800/80 bg-emerald-950/60 px-3 py-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
+              <span className="text-xs font-medium text-emerald-200" title="Player Session">
                 {user.username}
               </span>
-            ) : null}
-          </nav>
+            </div>
+          ) : null}
         </div>
       </header>
       <Outlet />
     </div>
   )
 }
+

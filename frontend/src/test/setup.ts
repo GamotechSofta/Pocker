@@ -11,3 +11,4 @@ afterEach(() => {
   useAuthStore.setState({ token: null, user: null })
   useGameStore.getState().resetGame()
   useLobbyStore.getState().resetLobby()
+})

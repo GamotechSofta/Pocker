@@ -8,6 +8,8 @@ import com.poker.dto.TableDetailResponse;
 import com.poker.service.TableService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +29,8 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class MatchmakingService {
 
+    private static final Logger log = LoggerFactory.getLogger(MatchmakingService.class);
+
     private final TableService tableService;
     private final long botFallbackMs;
     private final long expiryMs;
@@ -36,7 +40,7 @@ public class MatchmakingService {
 
     public MatchmakingService(
             TableService tableService,
-            @Value("${poker.matchmaking.bot-fallback-ms:3500}") long botFallbackMs,
+            @Value("${poker.matchmaking.bot-fallback-ms:1500}") long botFallbackMs,
             @Value("${poker.matchmaking.expiry-ms:30000}") long expiryMs
     ) {
         this.tableService = tableService;
@@ -46,24 +50,40 @@ public class MatchmakingService {
 
     @PostConstruct
     void start() {
-        scheduler.scheduleWithFixedDelay(this::processSafely, 200, 250, TimeUnit.MILLISECONDS);
+        scheduler.scheduleWithFixedDelay(this::processSafely, 100, 200, TimeUnit.MILLISECONDS);
     }
 
     public MatchmakingTicketResponse enqueue(UUID userId, MatchmakingRequest request) {
+        Config conf = config(request);
         var seated = tableService.seatedTableId(userId);
         if (seated.isPresent()) {
-            Ticket resumed = Ticket.matched(userId, config(request), seated.get());
-            tickets.put(resumed.id, resumed);
-            return resumed.response();
+            boolean shouldResume = true;
+            try {
+                TableDetailResponse detail = tableService.getTable(seated.get());
+                if (detail != null && detail.variant() != null && !detail.variant().equalsIgnoreCase(conf.variant())) {
+                    shouldResume = false;
+                    tableService.leaveTable(seated.get(), userId);
+                }
+            } catch (RuntimeException ex) {
+                // Keep resume if getTable fails
+            }
+            if (shouldResume) {
+                Ticket resumed = Ticket.matched(userId, conf, seated.get());
+                tickets.put(resumed.id, resumed);
+                return resumed.response();
+            }
         }
 
         tickets.values().stream()
                 .filter(ticket -> ticket.userId.equals(userId) && ticket.status == Status.QUEUED)
                 .forEach(ticket -> ticket.status = Status.CANCELLED);
 
-        Ticket ticket = new Ticket(UUID.randomUUID(), userId, config(request));
+        Ticket ticket = new Ticket(UUID.randomUUID(), userId, conf);
         tickets.put(ticket.id, ticket);
-        queues.computeIfAbsent(ticket.config.queueKey(), ignored -> new ConcurrentLinkedQueue<>()).add(ticket.id);
+
+        // Instantly match or create a table on the spot
+        matchOrCreateSingle(ticket);
+
         return ticket.response();
     }
 
@@ -89,8 +109,8 @@ public class MatchmakingService {
     private void processSafely() {
         try {
             processQueues();
-        } catch (RuntimeException ignored) {
-            // One failed queue must not stop future matchmaking passes.
+        } catch (RuntimeException ex) {
+            log.error("Error processing matchmaking queues: {}", ex.getMessage(), ex);
         }
     }
 
@@ -120,7 +140,7 @@ public class MatchmakingService {
             for (Ticket ticket : waiting) {
                 long elapsed = Duration.between(ticket.createdAt, now).toMillis();
                 if (ticket.config.allowBotFallback && elapsed >= botFallbackMs) {
-                    createMatch(List.of(ticket), false);
+                    matchOrCreateSingle(ticket);
                 } else if (elapsed >= expiryMs) {
                     ticket.status = Status.EXPIRED;
                 } else {
@@ -128,6 +148,28 @@ public class MatchmakingService {
                 }
             }
         }
+    }
+
+    private void matchOrCreateSingle(Ticket ticket) {
+        // 1. Try to find an existing waiting table with an open seat for the same variant
+        var openTable = tableService.listTables().stream()
+                .filter(t -> t.variant().equalsIgnoreCase(ticket.config.variant))
+                .filter(t -> t.status().equalsIgnoreCase("WAITING") && t.playerCount() < t.maxPlayers())
+                .findFirst();
+
+        if (openTable.isPresent()) {
+            try {
+                tableService.joinTable(openTable.get().id(), ticket.userId, new JoinTableRequest(null));
+                ticket.matchedTableId = openTable.get().id();
+                ticket.status = Status.MATCHED;
+                return;
+            } catch (RuntimeException ex) {
+                log.debug("Could not join open table {}: {}", openTable.get().id(), ex.getMessage());
+            }
+        }
+
+        // 2. Otherwise create a suitable table
+        createMatch(List.of(ticket), false);
     }
 
     private void createMatch(List<Ticket> group, boolean fullHumanTable) {
@@ -153,6 +195,7 @@ public class MatchmakingService {
                 ticket.status = Status.MATCHED;
             }
         } catch (RuntimeException ex) {
+            log.error("Failed to create match for group: {}", ex.getMessage(), ex);
             group.forEach(ticket -> ticket.status = Status.EXPIRED);
         }
     }
