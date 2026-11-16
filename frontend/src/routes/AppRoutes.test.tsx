@@ -48,22 +48,23 @@ describe('app routes without login', () => {
     })
   })
 
-  it('shows variants on home after silent guest session', async () => {
+  it('shows the Royal game picker on home after a silent guest session', async () => {
     renderPath('/')
-    expect(await screen.findByRole('heading', { name: /select your poker game/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /texas hold'em/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /choose your poker/i })).toBeInTheDocument()
+    for (const game of ["Texas Hold'em", 'Omaha', 'Pineapple', '5-Card Draw', 'Razz']) {
+      expect(screen.getByRole('button', { name: game })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'Choose character' })).toBeInTheDocument()
     expect(guestMock).toHaveBeenCalled()
-    expect(screen.queryByRole('link', { name: /^login$/i })).not.toBeInTheDocument()
   })
 
   it('redirects old login and register paths to home', async () => {
     renderPath('/login')
-    expect(await screen.findByRole('heading', { name: /select your poker game/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /choose your poker/i })).toBeInTheDocument()
   })
 
-  it('opens lobby without a login gate', async () => {
+  it('sends the old table lobby to the game picker', async () => {
     renderPath('/lobby')
-    expect(await screen.findByRole('heading', { name: 'Lobby' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /choose your poker/i })).toBeInTheDocument()
   })
 })
-

@@ -11,17 +11,24 @@ public class PokerTablePlayer {
     private String email;
     private int seat;
     private int chipStack;
+    /** Active buy-in/rebuy escrow id (survives process restart). */
+    private String escrowId;
 
     protected PokerTablePlayer() {
     }
 
     public PokerTablePlayer(User user, int seat, int chipStack) {
+        this(user, seat, chipStack, null);
+    }
+
+    public PokerTablePlayer(User user, int seat, int chipStack, String escrowId) {
         this.id = UUID.randomUUID();
         this.userId = user.getId();
         this.username = user.getUsername();
         this.email = user.getEmail();
         this.seat = seat;
         this.chipStack = chipStack;
+        this.escrowId = escrowId;
     }
 
     public UUID getId() {
@@ -50,5 +57,13 @@ public class PokerTablePlayer {
 
     public void setChipStack(int chipStack) {
         this.chipStack = chipStack;
+    }
+
+    public String getEscrowId() {
+        return escrowId;
+    }
+
+    public void setEscrowId(String escrowId) {
+        this.escrowId = escrowId;
     }
 }

@@ -28,7 +28,7 @@ import java.util.Locale;
 import java.util.Set;
 
 @Configuration
-@EnableConfigurationProperties({JwtProperties.class, TableProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, TableProperties.class, WalletProperties.class})
 public class SecurityConfig {
 
     @Bean
@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/guest").permitAll()
                         .requestMatchers("/api/status").permitAll()
+                        .requestMatchers("/api/admin/**").permitAll()
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/metrics").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

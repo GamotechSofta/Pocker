@@ -6,38 +6,22 @@ import java.util.function.Predicate;
 
 public class TurnManager {
 
-    private static final List<Integer> SIX_SEAT_BOT_RING = List.of(2, 1, 0, 3, 5, 4);
-
     private final int maxPlayers;
-    private final List<Integer> seatRing;
 
     public TurnManager(int maxPlayers) {
         this.maxPlayers = maxPlayers;
-        this.seatRing = java.util.stream.IntStream.range(0, maxPlayers).boxed().toList();
     }
 
+    /** Seats run clockwise 0..n-1; the table UI lays seats out clockwise from the viewer in the same order. */
     public int nextSeat(GameState state, int fromSeat, Predicate<PlayerState> predicate) {
-        List<Integer> activeRing = activeSeatRing(state);
-        int fromIndex = activeRing.indexOf(fromSeat);
-        if (fromIndex < 0) {
-            fromIndex = activeRing.size() - 1;
-        }
-        for (int i = 0; i < maxPlayers; i++) {
-            int seat = activeRing.get((fromIndex + i + 1) % activeRing.size());
+        for (int i = 1; i <= maxPlayers; i++) {
+            int seat = Math.floorMod(fromSeat + i, maxPlayers);
             PlayerState player = state.playerAt(seat);
             if (player != null && predicate.test(player)) {
                 return seat;
             }
         }
         return -1;
-    }
-
-    private List<Integer> activeSeatRing(GameState state) {
-        boolean fullBotTable = maxPlayers == 6
-                && state.getPlayers().size() == 6
-                && state.getPlayers().stream()
-                        .anyMatch(player -> player.getUsername().toLowerCase().startsWith("bot_"));
-        return fullBotTable ? SIX_SEAT_BOT_RING : seatRing;
     }
 
     public int nextOccupiedSeat(GameState state, int fromSeat) {

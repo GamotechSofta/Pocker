@@ -1,8 +1,8 @@
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getTable, getTableState, leaveTable, startTable } from '@/api/tables'
+import { getTable, getTableState, leaveTable } from '@/api/tables'
 import { appRouteObjects } from '@/routes/appRouteObjects'
 import { gameSocket } from '@/services/gameSocket'
 import { useAuthStore } from '@/store/authStore'
@@ -10,24 +10,10 @@ import { useGameStore } from '@/store/gameStore'
 import type { TableDetail } from '@/types/api'
 import type { PlayerView, TableState } from '@/types/game'
 
-vi.mock('@/api/status', () => ({
-  fetchBackendStatus: () => Promise.resolve({ status: 'ok', service: 'poker', timestamp: '2026-01-01T00:00:00Z' }),
-}))
-
 vi.mock('@/api/auth', () => ({
   login: vi.fn(),
   register: vi.fn(),
-  createGuestSession: vi.fn().mockResolvedValue({
-    token: 'guest-jwt',
-    tokenType: 'Bearer',
-    expiresIn: 86_400,
-    user: {
-      id: '11111111-1111-1111-1111-111111111111',
-      username: 'g_player1',
-      email: 'g_player1@guest.local',
-      createdAt: '2026-01-01T00:00:00Z',
-    },
-  }),
+  createGuestSession: vi.fn(),
   fetchCurrentUser: vi.fn(),
 }))
 
@@ -56,23 +42,11 @@ vi.mock('@/services/gameSocket', () => ({
 
 const getTableMock = vi.mocked(getTable)
 const getStateMock = vi.mocked(getTableState)
-const startMock = vi.mocked(startTable)
 const leaveMock = vi.mocked(leaveTable)
+const sendMock = vi.mocked(gameSocket.sendAction)
 
 const userId = '11111111-1111-1111-1111-111111111111'
 const otherId = '22222222-2222-2222-2222-222222222222'
-
-function signIn() {
-  useAuthStore.setState({
-    token: 'jwt-token',
-    user: {
-      id: userId,
-      username: 'player1',
-      email: 'player1@poker.local',
-      createdAt: '2026-01-01T00:00:00Z',
-    },
-  })
-}
 
 function player(partial: Partial<PlayerView> & Pick<PlayerView, 'playerId' | 'username' | 'seat'>): PlayerView {
   return {
@@ -88,7 +62,7 @@ function player(partial: Partial<PlayerView> & Pick<PlayerView, 'playerId' | 'us
   }
 }
 
-function waitingTable(): TableDetail {
+function table(partial: Partial<TableDetail> = {}): TableDetail {
   return {
     id: 't1',
     name: "Evening Hold'em",
@@ -101,6 +75,7 @@ function waitingTable(): TableDetail {
     createdBy: userId,
     createdAt: '2026-01-01T00:00:00Z',
     players: [{ playerId: userId, username: 'player1', seat: 0, chipStack: 1000 }],
+    ...partial,
   }
 }
 
@@ -128,10 +103,12 @@ function waitingState(): TableState {
     showdown: [],
     legalActions: { actions: [], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 0 },
     viewerPlayerId: userId,
+    turnDeadline: null,
   }
 }
 
-function playingState(): TableState {
+/** Mid-hand snapshot (last event is not HAND_STARTED), so no deal animation plays. */
+function playingState(partial: Partial<TableState> = {}): TableState {
   return {
     ...waitingState(),
     status: 'PRE_FLOP',
@@ -144,38 +121,17 @@ function playingState(): TableState {
     currentBet: 20,
     minimumRaise: 20,
     bettingRound: 'PRE_FLOP',
-    communityCards: [],
     players: [
-      player({
-        playerId: userId,
-        username: 'player1',
-        seat: 0,
-        chipStack: 990,
-        betThisRound: 10,
-        status: 'ACTIVE',
-        isTurn: true,
-        holeCards: ['AS', 'KH'],
-      }),
-      player({
-        playerId: otherId,
-        username: 'player2',
-        seat: 1,
-        chipStack: 980,
-        betThisRound: 20,
-        status: 'ACTIVE',
-        holeCards: ['HIDDEN', 'HIDDEN'],
-      }),
+      player({ playerId: userId, username: 'player1', seat: 0, chipStack: 990, betThisRound: 10, isTurn: true, holeCards: ['AS', 'KH'] }),
+      player({ playerId: otherId, username: 'bot_maya', seat: 1, chipStack: 980, betThisRound: 20, holeCards: ['HIDDEN', 'HIDDEN'] }),
     ],
     events: [
       { type: 'HAND_STARTED', detail: 'Hand 1' },
-      { type: 'BLINDS_POSTED', detail: 'SB player1, BB player2' },
+      { type: 'BLINDS_POSTED', detail: 'SB player1, BB bot_maya' },
     ],
-    legalActions: {
-      actions: ['FOLD', 'CALL', 'RAISE', 'ALL_IN'],
-      callAmount: 10,
-      minBetOrRaiseTo: 40,
-      maxBetOrRaiseTo: 990,
-    },
+    legalActions: { actions: ['FOLD', 'CALL', 'RAISE', 'ALL_IN'], callAmount: 10, minBetOrRaiseTo: 40, maxBetOrRaiseTo: 990 },
+    turnDeadline: new Date(Date.now() + 30_000).toISOString(),
+    ...partial,
   }
 }
 
@@ -190,21 +146,8 @@ function showdownState(): TableState {
     communityCards: ['8C', '7D', 'QS', '2H', '9S'],
     legalActions: { actions: [], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 0 },
     players: [
-      player({
-        playerId: userId,
-        username: 'player1',
-        seat: 0,
-        chipStack: 1020,
-        isTurn: false,
-        holeCards: ['AS', 'AH'],
-      }),
-      player({
-        playerId: otherId,
-        username: 'player2',
-        seat: 1,
-        chipStack: 980,
-        holeCards: ['KD', 'QC'],
-      }),
+      player({ playerId: userId, username: 'player1', seat: 0, chipStack: 1020, holeCards: ['AS', 'AH'] }),
+      player({ playerId: otherId, username: 'bot_maya', seat: 1, chipStack: 980, holeCards: ['KD', 'QC'] }),
     ],
     payouts: [{ playerId: userId, amount: 40 }],
     showdown: [
@@ -215,438 +158,235 @@ function showdownState(): TableState {
       { type: 'SHOWDOWN', detail: 'Hands revealed' },
       { type: 'PAYOUT', detail: 'player1 collected 40' },
     ],
+    turnDeadline: null,
   }
 }
 
 function renderGame() {
   const router = createMemoryRouter(appRouteObjects, { initialEntries: ['/game/t1'] })
-  return render(<RouterProvider router={router} />)
+  render(<RouterProvider router={router} />)
+  return router
 }
 
-describe('GamePage', () => {
+function liveTable() {
+  return table({
+    status: 'PLAYING',
+    players: [
+      { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
+      { playerId: otherId, username: 'bot_maya', seat: 1, chipStack: 980 },
+    ],
+  })
+}
+
+describe('GamePage (Royal table)', () => {
   beforeEach(() => {
-    signIn()
+    localStorage.clear()
+    useAuthStore.setState({
+      token: 'jwt-token',
+      user: { id: userId, username: 'player1', email: 'player1@poker.local', createdAt: '2026-01-01T00:00:00Z' },
+    })
     useGameStore.getState().resetGame()
     getTableMock.mockReset()
     getStateMock.mockReset()
-    startMock.mockReset()
     leaveMock.mockReset()
-    vi.mocked(gameSocket.sendAction).mockReset()
-    vi.mocked(gameSocket.connect).mockClear()
+    sendMock.mockReset()
   })
 
-  it('renders a waiting table from sanitized server state', async () => {
-    getTableMock.mockResolvedValue(waitingTable())
+  it('shows the waiting room with empty seats and the join countdown', async () => {
+    getTableMock.mockResolvedValue(table())
     getStateMock.mockResolvedValue(waitingState())
     renderGame()
+
     expect(await screen.findByRole('heading', { name: "Evening Hold'em" })).toBeInTheDocument()
-    expect(screen.getByTitle('Seat 2 empty')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Start hand' })).not.toBeInTheDocument()
+    expect(screen.getByText('Players are joining')).toBeInTheDocument()
+    expect(screen.getAllByText('Empty')).toHaveLength(5)
+    expect(screen.getByText('Seat 2')).toBeInTheDocument()
+    expect(screen.getByText('Waiting for players…')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Table Menu' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Leave Table' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Full screen' })).toBeInTheDocument()
-    expect(screen.getByText(/hand has not started/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hands' })).toBeInTheDocument()
   })
 
-  it('shows live cards, pot, dealer, turn, and legal actions', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
+  it('shows cards, pot, blinds and the poker actions on your turn', async () => {
+    getTableMock.mockResolvedValue(liveTable())
     getStateMock.mockResolvedValue(playingState())
     renderGame()
-    expect(await screen.findByText('Pot')).toBeInTheDocument()
-    expect(screen.getByText('30')).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Ace of spades' })).toBeInTheDocument()
+
+    expect(await screen.findByRole('img', { name: 'Ace of spades' })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'King of hearts' })).toBeInTheDocument()
-    expect(screen.getAllByRole('img', { name: 'Facedown card' })).toHaveLength(2)
-    expect(screen.getByText('To act')).toBeInTheDocument()
+    expect(screen.getByLabelText('Pot 30')).toBeInTheDocument()
+    expect(screen.getByText('Maya')).toBeInTheDocument()
+    expect(screen.getByText('2 cards')).toBeInTheDocument()
     expect(screen.getByText('D')).toBeInTheDocument()
     expect(screen.getByText('SB')).toBeInTheDocument()
     expect(screen.getByText('BB')).toBeInTheDocument()
-    const fold = screen.getByRole('button', { name: 'Fold' })
-    const call = screen.getByRole('button', { name: 'Call 10' })
-    expect(fold).toBeEnabled()
-    expect(call).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Fold' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Call 10' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Raise' })).toBeEnabled()
-    expect(screen.queryByRole('button', { name: 'Start hand' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'All-in' })).toBeEnabled()
   })
 
-  it('shows four Omaha hole cards and the two-plus-three rule', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      name: 'Omaha 10/20',
-      variant: 'OMAHA',
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
-    getStateMock.mockResolvedValue({
-      ...playingState(),
-      name: 'Omaha 10/20',
-      variant: 'OMAHA',
-      players: [
-        player({
-          playerId: userId,
-          username: 'player1',
-          seat: 0,
-          chipStack: 990,
-          betThisRound: 10,
-          isTurn: true,
-          holeCards: ['AS', 'KH', 'QD', 'JC'],
-        }),
-        player({
-          playerId: otherId,
-          username: 'player2',
-          seat: 1,
-          chipStack: 980,
-          betThisRound: 20,
-          holeCards: ['HIDDEN', 'HIDDEN', 'HIDDEN', 'HIDDEN'],
-        }),
-      ],
-    })
-    renderGame()
-    expect(await screen.findByRole('heading', { name: 'Omaha 10/20' })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Ace of spades' })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: 'Queen of diamonds' })).toBeInTheDocument()
-    expect(screen.getAllByRole('img', { name: 'Facedown card' })).toHaveLength(4)
-  })
-
-  it('shows pineapple discard choices for three hole cards', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      name: 'Pineapple 10/20',
-      variant: 'PINEAPPLE',
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
-    getStateMock.mockResolvedValue({
-      ...playingState(),
-      name: 'Pineapple 10/20',
-      variant: 'PINEAPPLE',
-      status: 'DISCARD',
-      bettingRound: 'DISCARD',
-      players: [
-        player({
-          playerId: userId,
-          username: 'player1',
-          seat: 0,
-          chipStack: 990,
-          betThisRound: 10,
-          isTurn: true,
-          holeCards: ['AS', 'KH', '2C'],
-        }),
-        player({
-          playerId: otherId,
-          username: 'player2',
-          seat: 1,
-          chipStack: 980,
-          betThisRound: 20,
-          holeCards: ['HIDDEN', 'HIDDEN', 'HIDDEN'],
-        }),
-      ],
-      legalActions: { actions: ['DISCARD'], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 2 },
-    })
-    const user = userEvent.setup()
-    renderGame()
-    expect(await screen.findByRole('heading', { name: 'Pineapple 10/20' })).toBeInTheDocument()
-    expect(screen.getByText(/discard exactly one hole card/i)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /discard card 3/i }))
-    expect(gameSocket.sendAction).toHaveBeenCalledWith(
-      't1',
-      expect.objectContaining({ action: 'DISCARD', amount: 2 }),
-    )
-  })
-
-  it('shows 5-card draw multi-select and stands pat', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      name: 'Draw 10/20',
-      variant: 'FIVE_CARD_DRAW',
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
-    getStateMock.mockResolvedValue({
-      ...playingState(),
-      name: 'Draw 10/20',
-      variant: 'FIVE_CARD_DRAW',
-      status: 'DRAW',
-      bettingRound: 'DRAW',
-      communityCards: [],
-      players: [
-        player({
-          playerId: userId,
-          username: 'player1',
-          seat: 0,
-          chipStack: 990,
-          betThisRound: 20,
-          isTurn: true,
-          holeCards: ['AS', 'KH', '2C', '3D', '4H'],
-        }),
-        player({
-          playerId: otherId,
-          username: 'player2',
-          seat: 1,
-          chipStack: 980,
-          betThisRound: 20,
-          holeCards: ['HIDDEN', 'HIDDEN', 'HIDDEN', 'HIDDEN', 'HIDDEN'],
-        }),
-      ],
-      legalActions: { actions: ['DISCARD'], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 5 },
-    })
-    const user = userEvent.setup()
-    renderGame()
-    expect(await screen.findByRole('heading', { name: 'Draw 10/20' })).toBeInTheDocument()
-    expect(screen.getByText(/select up to 5/i)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /stand pat/i }))
-    expect(gameSocket.sendAction).toHaveBeenCalledWith(
-      't1',
-      expect.objectContaining({ action: 'DISCARD', indices: [] }),
-    )
-  })
-
-  it('shows razz copy and third-street status', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      name: 'Razz 10/20',
-      variant: 'RAZZ',
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
-    getStateMock.mockResolvedValue({
-      ...playingState(),
-      name: 'Razz 10/20',
-      variant: 'RAZZ',
-      status: 'THIRD_STREET',
-      bettingRound: 'THIRD_STREET',
-      communityCards: [],
-      players: [
-        player({
-          playerId: userId,
-          username: 'player1',
-          seat: 0,
-          chipStack: 990,
-          betThisRound: 10,
-          isTurn: true,
-          holeCards: ['AS', '2H', '3C'],
-        }),
-        player({
-          playerId: otherId,
-          username: 'player2',
-          seat: 1,
-          chipStack: 980,
-          betThisRound: 20,
-          holeCards: ['HIDDEN', 'HIDDEN', 'HIDDEN'],
-        }),
-      ],
-      legalActions: { actions: ['FOLD', 'CALL'], callAmount: 10, minBetOrRaiseTo: 40, maxBetOrRaiseTo: 1000 },
-    })
-    renderGame()
-    expect(await screen.findByRole('heading', { name: 'Razz 10/20' })).toBeInTheDocument()
-    expect(screen.getAllByText(/3rd street/i).length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('sends fold and raise over the socket', async () => {
-    const user = userEvent.setup()
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
+  it('sends a call over the socket', async () => {
+    getTableMock.mockResolvedValue(liveTable())
     getStateMock.mockResolvedValue(playingState())
     renderGame()
-    await screen.findByRole('button', { name: 'Fold' })
-    await user.click(screen.getByRole('button', { name: 'Fold' }))
-    expect(gameSocket.sendAction).toHaveBeenCalledWith(
-      't1',
-      expect.objectContaining({ action: 'FOLD', amount: null }),
-    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Call 10' }))
+    expect(sendMock).toHaveBeenCalledWith('t1', { action: 'CALL', amount: null })
   })
 
-  it('validates a raise amount before sending', async () => {
-    const user = userEvent.setup()
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
+  it('validates the raise amount before sending it', async () => {
+    getTableMock.mockResolvedValue(liveTable())
     getStateMock.mockResolvedValue(playingState())
     renderGame()
-    const amount = await screen.findByLabelText(/bet or raise to/i)
-    await user.clear(amount)
-    await user.type(amount, '10')
-    await user.click(screen.getByRole('button', { name: 'Raise' }))
-    expect(screen.getByText(/enter a whole number from 40 to 990/i)).toBeInTheDocument()
-    expect(gameSocket.sendAction).not.toHaveBeenCalled()
-    await user.clear(amount)
-    await user.type(amount, '80')
-    await user.click(screen.getByRole('button', { name: 'Raise' }))
-    expect(gameSocket.sendAction).toHaveBeenCalledWith(
-      't1',
-      expect.objectContaining({ action: 'RAISE', amount: 80 }),
-    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Raise' }))
+    const panel = screen.getByRole('dialog', { name: 'Raise amount' })
+    const input = within(panel).getByLabelText('Raise to')
+    await userEvent.clear(input)
+    await userEvent.type(input, '5')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Confirm Raise' }))
+    expect(within(panel).getByRole('alert')).toHaveTextContent('Enter a whole number from 40 to 990.')
+    expect(sendMock).not.toHaveBeenCalled()
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Pot' }))
+    await userEvent.clear(input)
+    await userEvent.type(input, '120')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Confirm Raise' }))
+    expect(sendMock).toHaveBeenCalledWith('t1', { action: 'RAISE', amount: 120 })
   })
 
-  it('hides action buttons when it is not your turn', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      status: 'PLAYING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 990 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
-    getStateMock.mockResolvedValue({
-      ...playingState(),
-      currentTurnSeat: 1,
-      players: playingState().players.map((row) => ({
-        ...row,
-        isTurn: row.playerId === otherId,
-      })),
-      legalActions: { actions: [], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 0 },
-    })
+  it('waits for the opponent when it is not your turn', async () => {
+    getTableMock.mockResolvedValue(liveTable())
+    const state = playingState()
+    state.players = state.players.map((row) => ({ ...row, isTurn: row.playerId === otherId }))
+    state.legalActions = { actions: [], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 0 }
+    getStateMock.mockResolvedValue(state)
     renderGame()
-    expect(await screen.findByText('Waiting for player2.')).toBeInTheDocument()
+
+    expect(await screen.findByText('Waiting for Maya…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Fold' })).not.toBeInTheDocument()
   })
 
-  it('shows confirmation modal and allows cancelling leave table', async () => {
-    const user = userEvent.setup()
-    getTableMock.mockResolvedValue(waitingTable())
-    getStateMock.mockResolvedValue(waitingState())
+  it('lets Pineapple players throw away one hole card', async () => {
+    getTableMock.mockResolvedValue(liveTable())
+    getStateMock.mockResolvedValue(
+      playingState({
+        variant: 'PINEAPPLE',
+        status: 'DISCARD',
+        bettingRound: 'DISCARD',
+        players: [
+          player({ playerId: userId, username: 'player1', seat: 0, isTurn: true, holeCards: ['AS', 'KH', '2C'] }),
+          player({ playerId: otherId, username: 'bot_maya', seat: 1, holeCards: ['HIDDEN', 'HIDDEN', 'HIDDEN'] }),
+        ],
+        legalActions: { actions: ['DISCARD'], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 2 },
+      }),
+    )
     renderGame()
-    await screen.findByRole('button', { name: 'Leave Table' })
-    await user.click(screen.getByRole('button', { name: 'Leave Table' }))
-    expect(await screen.findByRole('heading', { name: 'Leave this table?' })).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'If you leave during an active hand, your hand will be folded and chips already committed to the pot will not be returned.',
-      ),
-    ).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('heading', { name: 'Leave this table?' })).not.toBeInTheDocument()
-    expect(leaveMock).not.toHaveBeenCalled()
+
+    expect(await screen.findByText('Tap 1 card to throw away')).toBeInTheDocument()
+    const discard = screen.getByRole('button', { name: 'Discard' })
+    expect(discard).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Discard card 3' }))
+    await userEvent.click(discard)
+    expect(sendMock).toHaveBeenCalledWith('t1', { action: 'DISCARD', amount: 2 })
   })
 
-  it('leaves a table and returns to the home screen when confirmed via Leave Table modal', async () => {
-    const user = userEvent.setup()
-    getTableMock.mockResolvedValue(waitingTable())
-    getStateMock.mockResolvedValue(waitingState())
-    leaveMock.mockResolvedValue({ ...waitingTable(), players: [] })
+  it('lets 5-Card Draw players swap several cards or stand pat', async () => {
+    getTableMock.mockResolvedValue(liveTable())
+    getStateMock.mockResolvedValue(
+      playingState({
+        variant: 'FIVE_CARD_DRAW',
+        status: 'DRAW',
+        bettingRound: 'DRAW',
+        players: [
+          player({ playerId: userId, username: 'player1', seat: 0, isTurn: true, holeCards: ['AS', 'KH', '2C', '7D', '9S'] }),
+          player({ playerId: otherId, username: 'bot_maya', seat: 1, holeCards: Array(5).fill('HIDDEN') }),
+        ],
+        legalActions: { actions: ['DISCARD'], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 3 },
+      }),
+    )
     renderGame()
-    await screen.findByRole('button', { name: 'Leave Table' })
-    await user.click(screen.getByRole('button', { name: 'Leave Table' }))
-    expect(await screen.findByRole('heading', { name: 'Leave this table?' })).toBeInTheDocument()
-    // Click the confirm "Leave Table" button inside the modal dialog
-    const modal = screen.getByRole('dialog', { name: 'Leave this table?' })
-    const confirmButton = modal.querySelector('button.bg-rose-700') as HTMLElement
-    await user.click(confirmButton)
-    expect(leaveMock).toHaveBeenCalledWith('t1')
-    expect(await screen.findByRole('heading', { name: /select your poker game/i })).toBeInTheDocument()
+
+    expect(await screen.findByRole('button', { name: 'Stand Pat' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Discard card 3' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Discard card 4' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Draw 2' }))
+    expect(sendMock).toHaveBeenCalledWith('t1', { action: 'DISCARD', amount: null, indices: [2, 3] })
   })
 
-  it('shows showdown ranks, revealed cards, and the backend winner', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      status: 'WAITING',
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 1020 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 980 },
-      ],
-    })
+  it('opens the result page after a showdown with every revealed hand', async () => {
+    getTableMock.mockResolvedValue(liveTable())
     getStateMock.mockResolvedValue(showdownState())
     renderGame()
-    expect(await screen.findByText('You win!')).toBeInTheDocument()
-    expect(screen.getByText(/pair of aces .+ \+40 chips/i)).toBeInTheDocument()
-    expect(screen.getAllByText('Queen high').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Winner').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('img', { name: 'Ace of spades' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('img', { name: 'King of diamonds' }).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('img', { name: 'Facedown card' })).not.toBeInTheDocument()
-    expect(screen.getByText(/this hand is over/i)).toBeInTheDocument()
+
+    const page = await screen.findByRole('region', { name: 'Hand Result Page' }, { timeout: 3000 })
+    expect(within(page).getByRole('heading', { name: /you won the hand/i })).toBeInTheDocument()
+    expect(within(page).getByText(/next hand starting in/i)).toBeInTheDocument()
+    expect(within(page).getAllByText(/pair of aces/i).length).toBeGreaterThan(0)
+    expect(within(page).getByText('Maya')).toBeInTheDocument()
+    expect(within(page).getByRole('img', { name: 'King of diamonds' })).toBeInTheDocument()
+
+    await userEvent.click(within(page).getByRole('button', { name: /back to table/i }))
+    expect(screen.queryByRole('region', { name: 'Hand Result Page' })).not.toBeInTheDocument()
   })
 
-  it('announces an uncontested fold win from payouts', async () => {
-    getTableMock.mockResolvedValue({
-      ...waitingTable(),
-      players: [
-        { playerId: userId, username: 'player1', seat: 0, chipStack: 1030 },
-        { playerId: otherId, username: 'player2', seat: 1, chipStack: 970 },
-      ],
+  it('confirms before leaving and returns to the game picker', async () => {
+    getTableMock.mockResolvedValue(liveTable())
+    getStateMock.mockResolvedValue(playingState())
+    leaveMock.mockResolvedValue(table({ players: [] }))
+    const router = renderGame()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Table Menu' }))
+    const dialog = screen.getByRole('dialog', { name: /leave confirmation/i })
+    expect(within(dialog).getByRole('heading', { name: 'Leave Active Table?' })).toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Resume Game' }))
+    expect(leaveMock).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Table Menu' }))
+    await userEvent.click(screen.getByRole('button', { name: /leave table/i }))
+    await waitFor(() => {
+      expect(leaveMock).toHaveBeenCalledWith('t1')
+      expect(router.state.location.pathname).toBe('/')
     })
-    getStateMock.mockResolvedValue({
-      ...playingState(),
-      status: 'NEXT_HAND',
-      bettingRound: 'NONE',
-      currentTurnSeat: -1,
-      pot: 0,
-      currentBet: 0,
-      legalActions: { actions: [], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 0 },
-      players: [
-        player({ playerId: userId, username: 'player1', seat: 0, chipStack: 1030, holeCards: ['AS', 'KH'] }),
-        player({
-          playerId: otherId,
-          username: 'player2',
-          seat: 1,
-          chipStack: 970,
-          folded: true,
-          holeCards: ['HIDDEN', 'HIDDEN'],
-        }),
-      ],
-      payouts: [{ playerId: userId, amount: 30 }],
-      showdown: [],
-      events: [
-        { type: 'PLAYER_WON_BY_FOLD', detail: 'player1 wins uncontested' },
-        { type: 'PAYOUT', detail: 'player1 collected 30' },
-      ],
+  })
+
+  it('offers the way back to the lobby once you are no longer seated', async () => {
+    getTableMock.mockResolvedValue(liveTable())
+    const state = playingState()
+    state.players = state.players.filter((row) => row.playerId !== userId)
+    state.legalActions = { actions: [], callAmount: 0, minBetOrRaiseTo: 0, maxBetOrRaiseTo: 0 }
+    getStateMock.mockResolvedValue(state)
+    const router = renderGame()
+
+    expect(await screen.findByText('You left this table')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Back to Lobby' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  })
+
+  it('shows server errors as a table toast', async () => {
+    getTableMock.mockResolvedValue(liveTable())
+    getStateMock.mockResolvedValue(playingState())
+    renderGame()
+    await screen.findByRole('button', { name: 'Fold' })
+
+    act(() => {
+      useGameStore.getState().setLastError({ code: 'INVALID_GAME_ACTION', message: 'It is not your turn.' })
     })
-    startMock.mockResolvedValue(playingState())
-    renderGame()
-    expect(await screen.findByText('You win!')).toBeInTheDocument()
-    expect(screen.getByText(/uncontested .+ \+30 chips/i)).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('It is not your turn.')
   })
 
-  it('shows reconnecting status in the header while the socket retries', async () => {
-    getTableMock.mockResolvedValue(waitingTable())
-    getStateMock.mockResolvedValue(waitingState())
+  it('flags a dropped socket in the control bar', async () => {
+    getTableMock.mockResolvedValue(liveTable())
+    getStateMock.mockResolvedValue(playingState())
     renderGame()
-    expect(await screen.findByRole('heading', { name: "Evening Hold'em" })).toBeInTheDocument()
-    useGameStore.getState().setConnectionStatus('reconnecting')
-    expect(await screen.findByTestId('ws-status')).toHaveTextContent('Reconnecting…')
-    expect(screen.queryByText(/disconnect does not fold/i)).not.toBeInTheDocument()
-  })
+    await screen.findByRole('button', { name: 'Fold' })
 
-  it('reconnects from the header when offline', async () => {
-    const user = userEvent.setup()
-    getTableMock.mockResolvedValue(waitingTable())
-    getStateMock.mockResolvedValue(waitingState())
-    renderGame()
-    expect(await screen.findByRole('heading', { name: "Evening Hold'em" })).toBeInTheDocument()
-    useGameStore.getState().setConnectionStatus('disconnected')
-    expect(await screen.findByTestId('ws-status')).toHaveTextContent('Offline')
-    await user.click(screen.getByRole('button', { name: 'Reconnect' }))
-    expect(gameSocket.connect).toHaveBeenCalled()
+    act(() => {
+      useGameStore.getState().setConnectionStatus('reconnecting')
+    })
+    expect(await screen.findByText(/connection lost/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fold' })).not.toBeInTheDocument()
   })
 })

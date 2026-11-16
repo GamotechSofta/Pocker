@@ -6,6 +6,11 @@ import jakarta.validation.constraints.Min;
 public record JoinTableRequest(
         @Min(0)
         @Max(9)
-        Integer seat
+        Integer seat,
+        /** When set, buy-in was already debited during matchmaking (escrow id). */
+        String prepaidEscrowId
 ) {
+    public JoinTableRequest(Integer seat) {
+        this(seat, null);
+    }
 }

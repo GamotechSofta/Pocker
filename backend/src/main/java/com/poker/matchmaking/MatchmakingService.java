@@ -6,6 +6,7 @@ import com.poker.dto.MatchmakingRequest;
 import com.poker.dto.MatchmakingTicketResponse;
 import com.poker.dto.TableDetailResponse;
 import com.poker.service.TableService;
+import com.poker.wallet.StakeEscrowService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -32,6 +33,7 @@ public class MatchmakingService {
     private static final Logger log = LoggerFactory.getLogger(MatchmakingService.class);
 
     private final TableService tableService;
+    private final StakeEscrowService stakeEscrowService;
     private final long botFallbackMs;
     private final long expiryMs;
     private final Map<UUID, Ticket> tickets = new ConcurrentHashMap<>();
@@ -40,10 +42,12 @@ public class MatchmakingService {
 
     public MatchmakingService(
             TableService tableService,
+            StakeEscrowService stakeEscrowService,
             @Value("${poker.matchmaking.bot-fallback-ms:1500}") long botFallbackMs,
             @Value("${poker.matchmaking.expiry-ms:30000}") long expiryMs
     ) {
         this.tableService = tableService;
+        this.stakeEscrowService = stakeEscrowService;
         this.botFallbackMs = botFallbackMs;
         this.expiryMs = expiryMs;
     }
@@ -76,13 +80,24 @@ public class MatchmakingService {
 
         tickets.values().stream()
                 .filter(ticket -> ticket.userId.equals(userId) && ticket.status == Status.QUEUED)
-                .forEach(ticket -> ticket.status = Status.CANCELLED);
+                .forEach(this::cancelAndRefund);
 
-        Ticket ticket = new Ticket(UUID.randomUUID(), userId, conf);
+        String escrowId = stakeEscrowService.reserveEntry(
+                userId.toString(),
+                conf.startingChips,
+                "Matchmaking buy-in"
+        );
+
+        Ticket ticket = new Ticket(UUID.randomUUID(), userId, conf, escrowId);
         tickets.put(ticket.id, ticket);
 
-        // Instantly match or create a table on the spot
-        matchOrCreateSingle(ticket);
+        try {
+            matchOrCreateSingle(ticket);
+        } catch (RuntimeException ex) {
+            refundTicket(ticket, "Match failed, entry returned");
+            ticket.status = Status.EXPIRED;
+            throw ex;
+        }
 
         return ticket.response();
     }
@@ -101,9 +116,28 @@ public class MatchmakingService {
             throw new IllegalArgumentException("Matchmaking ticket does not belong to this player.");
         }
         if (ticket.status == Status.QUEUED) {
-            ticket.status = Status.CANCELLED;
+            cancelAndRefund(ticket);
         }
         return ticket.response();
+    }
+
+    private void cancelAndRefund(Ticket ticket) {
+        ticket.status = Status.CANCELLED;
+        refundTicket(ticket, "Search cancelled, entry returned");
+    }
+
+    private void refundTicket(Ticket ticket, String reason) {
+        if (ticket.escrowId == null || ticket.escrowRefunded) {
+            return;
+        }
+        try {
+            if (stakeEscrowService.refundStake(ticket.escrowId, reason)) {
+                ticket.escrowRefunded = true;
+                ticket.escrowId = null;
+            }
+        } catch (RuntimeException ex) {
+            log.error("Failed to refund matchmaking stake {}: {}", ticket.escrowId, ex.getMessage());
+        }
     }
 
     private void processSafely() {
@@ -143,6 +177,7 @@ public class MatchmakingService {
                     matchOrCreateSingle(ticket);
                 } else if (elapsed >= expiryMs) {
                     ticket.status = Status.EXPIRED;
+                    refundTicket(ticket, "Search expired, entry returned");
                 } else {
                     queue.add(ticket.id);
                 }
@@ -151,15 +186,17 @@ public class MatchmakingService {
     }
 
     private void matchOrCreateSingle(Ticket ticket) {
-        // 1. Try to find an existing waiting table with an open seat for the same variant
         var openTable = tableService.listTables().stream()
                 .filter(t -> t.variant().equalsIgnoreCase(ticket.config.variant))
+                .filter(t -> t.smallBlind() == ticket.config.smallBlind
+                        && t.bigBlind() == ticket.config.bigBlind
+                        && t.maxPlayers() == ticket.config.maxPlayers)
                 .filter(t -> t.status().equalsIgnoreCase("WAITING") && t.playerCount() < t.maxPlayers())
                 .findFirst();
 
         if (openTable.isPresent()) {
             try {
-                tableService.joinTable(openTable.get().id(), ticket.userId, new JoinTableRequest(null));
+                seatWithEscrow(openTable.get().id(), ticket);
                 ticket.matchedTableId = openTable.get().id();
                 ticket.status = Status.MATCHED;
                 return;
@@ -168,7 +205,6 @@ public class MatchmakingService {
             }
         }
 
-        // 2. Otherwise create a suitable table
         createMatch(List.of(ticket), false);
     }
 
@@ -185,7 +221,7 @@ public class MatchmakingService {
                     first.config.startingChips
             ));
             for (Ticket ticket : group) {
-                tableService.joinTable(table.id(), ticket.userId, new JoinTableRequest(null));
+                seatWithEscrow(table.id(), ticket);
             }
             if (fullHumanTable) {
                 tableService.startTable(table.id(), first.userId);
@@ -196,8 +232,17 @@ public class MatchmakingService {
             }
         } catch (RuntimeException ex) {
             log.error("Failed to create match for group: {}", ex.getMessage(), ex);
-            group.forEach(ticket -> ticket.status = Status.EXPIRED);
+            group.forEach(ticket -> {
+                ticket.status = Status.EXPIRED;
+                refundTicket(ticket, "Match failed, entry returned");
+            });
         }
+    }
+
+    private void seatWithEscrow(UUID tableId, Ticket ticket) {
+        tableService.joinTable(tableId, ticket.userId, new JoinTableRequest(null, ticket.escrowId));
+        // Escrow ownership transferred to the table seat; do not refund on later cancel.
+        ticket.escrowId = null;
     }
 
     private Ticket requireTicket(UUID ticketId) {
@@ -256,17 +301,20 @@ public class MatchmakingService {
         private final Instant createdAt;
         private volatile Status status;
         private volatile UUID matchedTableId;
+        private volatile String escrowId;
+        private volatile boolean escrowRefunded;
 
-        private Ticket(UUID id, UUID userId, Config config) {
+        private Ticket(UUID id, UUID userId, Config config, String escrowId) {
             this.id = id;
             this.userId = userId;
             this.config = config;
+            this.escrowId = escrowId;
             this.createdAt = Instant.now();
             this.status = Status.QUEUED;
         }
 
         static Ticket matched(UUID userId, Config config, UUID tableId) {
-            Ticket ticket = new Ticket(UUID.randomUUID(), userId, config);
+            Ticket ticket = new Ticket(UUID.randomUUID(), userId, config, null);
             ticket.matchedTableId = tableId;
             ticket.status = Status.MATCHED;
             return ticket;

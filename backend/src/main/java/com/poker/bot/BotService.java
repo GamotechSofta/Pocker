@@ -13,6 +13,7 @@ import com.poker.game.engine.TexasHoldemEngine;
 import com.poker.game.variants.Variants;
 import com.poker.repository.PokerTableRepository;
 import com.poker.repository.UserRepository;
+import com.poker.service.DealTiming;
 import com.poker.service.TableService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,10 +30,6 @@ import java.util.concurrent.ThreadLocalRandom;
 public class BotService {
 
     private static final Logger log = LoggerFactory.getLogger(BotService.class);
-    private static final long SHUFFLE_ANIMATION_MS = 1_800;
-    private static final long CARD_FLIGHT_MS = 650;
-    private static final long CARD_STAGGER_MS = 680;
-    private static final long DEAL_SETTLE_MS = 300;
     private static final String[] BOT_TAGS = {
             "aarav", "vihaan", "arjun", "kabir", "ishaan",
             "maya", "anaya", "diya", "sara", "riya"
@@ -84,17 +81,16 @@ public class BotService {
             return;
         }
 
-        // A solo player gets a full table: one human plus bots in every open seat.
+        // A solo player gets a full table, but bots arrive one at a time like real players
+        // joining a lobby. Each join publishes PLAYER_JOINED, which schedules the next arrival.
         int targetBots = Math.max(1, table.getMaxPlayers() - Math.toIntExact(humans));
-        while (bots < targetBots && seated.size() < table.getMaxPlayers()) {
+        if (bots < targetBots && seated.size() < table.getMaxPlayers()) {
             User bot = acquireBotUser();
             try {
                 tableService.joinTable(tableId, bot.getId(), new JoinTableRequest(null));
-                bots++;
-                seated = new ArrayList<>(tableRepository.findById(tableId).orElseThrow().getPlayers());
+                return;
             } catch (RuntimeException ex) {
                 log.debug("Could not seat bot {}: {}", bot.getUsername(), ex.getMessage());
-                break;
             }
         }
 
@@ -146,15 +142,12 @@ public class BotService {
     long dealAnimationDelayMs(UUID tableId) {
         PokerTable table = tableRepository.findById(tableId).orElse(null);
         if (table == null) {
-            return SHUFFLE_ANIMATION_MS + CARD_FLIGHT_MS + DEAL_SETTLE_MS;
+            return DealTiming.dealAnimationMs(2, 2);
         }
-        int playerCount = Math.max(2, table.getPlayers().size());
-        int cardsPerPlayer = Variants.create(table.getVariant()).getInitialHoleCards();
-        int dealtCards = playerCount * cardsPerPlayer;
-        return SHUFFLE_ANIMATION_MS
-                + Math.max(0, dealtCards - 1L) * CARD_STAGGER_MS
-                + CARD_FLIGHT_MS
-                + DEAL_SETTLE_MS;
+        return DealTiming.dealAnimationMs(
+                table.getPlayers().size(),
+                Variants.create(table.getVariant()).getInitialHoleCards()
+        );
     }
 
     private void fallbackAct(UUID tableId, UUID botId, LegalActions legal) {

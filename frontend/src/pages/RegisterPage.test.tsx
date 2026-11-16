@@ -36,6 +36,6 @@ describe('register route removed for embed', () => {
     useAuthStore.setState({ token: null, user: null })
     const router = createMemoryRouter(appRouteObjects, { initialEntries: ['/register'] })
     render(<RouterProvider router={router} />)
-    expect(await screen.findByRole('heading', { name: /select your poker game/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /choose your poker/i })).toBeInTheDocument()
   })
 })

@@ -1,25 +1,84 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getTable, getTableState, joinTable, leaveTable, startTable } from '@/api/tables'
-import { ActionPanel } from '@/components/table/ActionPanel'
+import { AlertCircle, Menu, RotateCw, Wifi } from 'lucide-react'
+import { getTable, getTableState, leaveTable } from '@/api/tables'
+import { soundEngine } from '@/audio/soundEngine'
 import { connectionLabel } from '@/components/table/ConnectionBanner'
-import { GameLog } from '@/components/table/GameLog'
-import { PokerTable } from '@/components/table/PokerTable'
-import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
-import { formatStreet, formatVariant, isHandIdle, TABLE_DEFAULTS } from '@/constants/table'
+import { LandscapeGate, useLandscapeGate } from '@/components/table/LandscapeGate'
+import { formatStreet, isHandIdle, TABLE_DEFAULTS } from '@/constants/table'
 import { paths } from '@/constants/paths'
 import { useAuth } from '@/hooks/useAuth'
 import { useGameSocket } from '@/hooks/useGameSocket'
 import { usePokerSounds } from '@/hooks/usePokerSounds'
+import { BoardCenter } from '@/royal/board/BoardCenter'
+import { ControlBar } from '@/royal/board/ControlBar'
+import { DealAnimation, type DealTarget } from '@/royal/board/DealAnimation'
+import { HandResultPage } from '@/royal/board/HandResultPage'
+import { HeroHand } from '@/royal/board/HeroHand'
+import { OpponentPod, type SeatPosition } from '@/royal/board/OpponentPod'
+import { HistorySheet, RankingsSheet, TableMenu } from '@/royal/board/TableSheets'
+import { FullscreenToggle } from '@/royal/FullscreenToggle'
+import { variantTitle } from '@/royal/pokerVariants'
+import { useProfileStore } from '@/royal/profileStore'
+import { SoundToggle } from '@/royal/SoundToggle'
 import { gameSocket } from '@/services/gameSocket'
 import { useGameStore } from '@/store/gameStore'
 import { useLobbyStore } from '@/store/lobbyStore'
 import type { TableDetail } from '@/types/api'
+import type { GameActionRequest, PlayerView, TableState } from '@/types/game'
 import { apiErrorMessage } from '@/utils/apiError'
-import type { GameActionRequest } from '@/types/game'
-import { hasHandResult } from '@/utils/results'
-import { displaySeatName } from '@/utils/seats'
+import { formatChipCount } from '@/utils/cards'
+import { hasHandResult, showdownFor, winnerIds } from '@/utils/results'
+import { displaySeatName, seatNameMap } from '@/utils/seats'
+
+/** Matches the server's RESULT_HOLD_MS: the next hand deals when this runs out. */
+const RESULT_COUNTDOWN_SECONDS = 7
+/** Let the final action and showdown cards land on the felt before the result page opens. */
+const RESULT_REVEAL_DELAY_MS = 1_400
+const JOIN_WAIT_SECONDS = 15
+
+/** Clockwise from the viewer, same as the Rummy table; nobody sits in front of the dealer. */
+function perimeterPosition(index: number, total: number): SeatPosition {
+  if (total === 1) return 'left'
+  if (total === 2) return index === 0 ? 'left' : 'right'
+  if (total === 3) return (['left', 'top-left', 'top-right'] as const)[index] ?? 'left'
+  if (total === 4) return (['left', 'top-left', 'top-right', 'right'] as const)[index] ?? 'left'
+  const seats: SeatPosition[] = ['left', 'top-left', 'top-right', 'right', 'bottom-right']
+  return seats[index % seats.length] ?? 'left'
+}
+
+function initialHoleCards(variant: string): number {
+  if (variant === 'OMAHA') return 4
+  if (variant === 'PINEAPPLE' || variant === 'RAZZ') return 3
+  if (variant === 'FIVE_CARD_DRAW') return 5
+  return 2
+}
+
+function blindTag(state: TableState | null, seat: number): 'SB' | 'BB' | null {
+  if (!state || isHandIdle(state.status)) return null
+  if (state.smallBlindSeat === seat) return 'SB'
+  if (state.bigBlindSeat === seat) return 'BB'
+  return null
+}
+
+function FlipButton() {
+  const { simulatedLandscape, toggleFlip } = useLandscapeGate()
+  if (!simulatedLandscape) return null
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        soundEngine.play('click')
+        toggleFlip()
+      }}
+      className="board-hud-menu board-hud-flip-btn"
+      title="Flip orientation 180°"
+      aria-label="Flip screen 180 degrees"
+    >
+      <RotateCw size={15} />
+    </button>
+  )
+}
 
 export function GamePage() {
   const { gameId = '' } = useParams()
@@ -32,55 +91,79 @@ export function GamePage() {
   const setLastError = useGameStore((store) => store.setLastError)
   const setCurrentTable = useLobbyStore((store) => store.setCurrentTable)
   const upsertTable = useLobbyStore((store) => store.upsertTable)
+  const displayName = useProfileStore((store) => store.displayName)
+  const avatarId = useProfileStore((store) => store.avatarId)
+
   const [table, setTable] = useState<TableDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sending, setSending] = useState(false)
-  const [dealingCards, setDealingCards] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [leaveModalOpen, setLeaveModalOpen] = useState(false)
-  const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement))
-  const [, setError] = useState<string | null>(null)
+  const [rankingsOpen, setRankingsOpen] = useState(false)
+  const [selected, setSelected] = useState<number[]>([])
+  const [toast, setToast] = useState<string | null>(null)
+  const [arrivalNotice, setArrivalNotice] = useState<string | null>(null)
+  const [waitSeconds, setWaitSeconds] = useState(JOIN_WAIT_SECONDS)
+  const [dealPlaying, setDealPlaying] = useState(false)
+  const [dealTargets, setDealTargets] = useState<DealTarget[]>([])
+  const [dealtCounts, setDealtCounts] = useState<Record<string, number> | null>(null)
+  const [resultOpenFor, setResultOpenFor] = useState<number | null>(null)
+  const [dismissedResult, setDismissedResult] = useState<number | null>(null)
   const alive = useRef(true)
   const leaveRequested = useRef(false)
   const seatedRef = useRef(false)
+  const prevHandRef = useRef<number | null>(null)
+  const dealPlayedRef = useRef<number | null>(null)
+  const [startStacks, setStartStacks] = useState<{ hand: number; stacks: Record<string, number> } | null>(null)
+  const seenPlayersRef = useRef<Set<string> | null>(null)
 
   const viewer = state?.players.find((player) => player.playerId === user?.id)
-  const resultSound = state && viewer && state.payouts.length > 0
-    ? {
-        key: `${state.handNumber}:${state.payouts.map((payout) => `${payout.playerId}-${payout.amount}`).join(',')}`,
-        outcome: new Set(state.payouts.map((payout) => payout.playerId)).size > 1
-          ? 'pot-split' as const
-          : state.payouts.some((payout) => payout.playerId === viewer.playerId)
-            ? 'win' as const
-            : 'lose' as const,
-      }
-    : undefined
-  const { soundEnabled, toggleSound, playSound, stopAllSounds } = usePokerSounds(state?.events ?? [], user?.username, resultSound)
+  const maxPlayers = table?.maxPlayers ?? TABLE_DEFAULTS.maxPlayers
+  const seated = state ? Boolean(viewer) : Boolean(table?.players.some((player) => player.playerId === user?.id))
+  seatedRef.current = seated
+  const idle = isHandIdle(state?.status ?? table?.status)
+  const complete = hasHandResult(state)
+  const waitingForPlayers = !state || (idle && !complete && state.handNumber === 0)
+  const actor = state?.players.find((player) => player.isTurn)
+  const seatNames = useMemo(() => seatNameMap(state?.players ?? []), [state?.players])
+  const nameFor = (player: PlayerView) => seatNames.get(player.playerId) ?? displaySeatName(player.username)
+  const winners = state ? winnerIds(state.payouts) : new Set<string>()
+  const handOver = winners.size > 0 || (state?.showdown.length ?? 0) > 0
 
-  const load = useCallback(async (quiet = false) => {
-    setError(null)
-    if (!quiet) {
-      setLoading(true)
-    }
-    try {
-      const [detail, snapshot] = await Promise.all([getTable(gameId), getTableState(gameId)])
-      if (!alive.current) {
-        return
+  const resultSound =
+    state && viewer && state.payouts.length > 0
+      ? {
+          key: `${state.handNumber}:${state.payouts.map((payout) => `${payout.playerId}-${payout.amount}`).join(',')}`,
+          outcome:
+            new Set(state.payouts.map((payout) => payout.playerId)).size > 1
+              ? ('pot-split' as const)
+              : state.payouts.some((payout) => payout.playerId === viewer.playerId)
+                ? ('win' as const)
+                : ('lose' as const),
+        }
+      : undefined
+  const { stopAllSounds } = usePokerSounds(state?.events ?? [], user?.username, resultSound)
+
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setLoading(true)
+      try {
+        const [detail, snapshot] = await Promise.all([getTable(gameId), getTableState(gameId)])
+        if (!alive.current) return
+        setLoadError(null)
+        setTable(detail)
+        setCurrentTable(detail)
+        setGameState(snapshot)
+      } catch (cause: unknown) {
+        if (alive.current) setLoadError(apiErrorMessage(cause))
+      } finally {
+        if (alive.current && !quiet) setLoading(false)
       }
-      setTable(detail)
-      setCurrentTable(detail)
-      setGameState(snapshot)
-    } catch (cause: unknown) {
-      if (alive.current) {
-        setError(apiErrorMessage(cause))
-      }
-    } finally {
-      if (alive.current && !quiet) {
-        setLoading(false)
-      }
-    }
-  }, [gameId, setCurrentTable, setGameState])
+    },
+    [gameId, setCurrentTable, setGameState],
+  )
 
   useEffect(() => {
     gameSocket.setOnReady(() => {
@@ -94,9 +177,7 @@ export function GamePage() {
     resetGame()
     void load()
     void connect(gameId).catch((cause: unknown) => {
-      if (alive.current) {
-        setError(apiErrorMessage(cause))
-      }
+      if (alive.current) setLoadError(apiErrorMessage(cause))
     })
     return () => {
       alive.current = false
@@ -106,24 +187,9 @@ export function GamePage() {
     }
   }, [connect, disconnect, gameId, load, resetGame, stopAllSounds])
 
-  const maxPlayers = table?.maxPlayers ?? TABLE_DEFAULTS.maxPlayers
-  const seated = Boolean(
-    table?.players.some((player) => player.playerId === user?.id) ||
-      state?.players.some((player) => player.playerId === user?.id),
-  )
-  const idle = isHandIdle(state?.status ?? table?.status)
-  const playerCount = state?.players.length ?? table?.players.length ?? 0
-  const canStart = seated && idle && playerCount >= 2
-  const canLeave = seated && idle
-  const canJoin = !seated && idle && playerCount < maxPlayers
-  seatedRef.current = seated
-  const actor = state?.players.find((player) => player.isTurn)
-
   useEffect(() => {
     const leaveOnPageHide = () => {
-      if (!seatedRef.current || leaveRequested.current) {
-        return
-      }
+      if (!seatedRef.current || leaveRequested.current) return
       leaveRequested.current = true
       void Promise.resolve(leaveTable(gameId, true)).catch(() => {
         leaveRequested.current = false
@@ -138,101 +204,129 @@ export function GamePage() {
 
   useEffect(() => {
     setSending(false)
-  }, [state?.bettingRound, state?.currentTurnSeat, state?.events.length, state?.handNumber, state?.pot])
+    setSelected([])
+  }, [state?.bettingRound, state?.currentTurnSeat, state?.events.length, state?.handNumber])
 
   useEffect(() => {
-    if (lastError) {
-      setSending(false)
-    }
+    if (!lastError) return
+    setSending(false)
+    setToast(lastError.message)
+    soundEngine.play('error')
+    const timer = window.setTimeout(() => setToast(null), 3500)
+    return () => window.clearTimeout(timer)
   }, [lastError])
 
+  // Chips each player started the hand with, to show net wins and losses on the result page.
   useEffect(() => {
-    const syncFullscreen = () => setFullscreen(Boolean(document.fullscreenElement))
-    document.addEventListener('fullscreenchange', syncFullscreen)
-    return () => document.removeEventListener('fullscreenchange', syncFullscreen)
-  }, [])
+    if (!state || isHandIdle(state.status) || state.handNumber === 0) return
+    if (startStacks?.hand === state.handNumber) return
+    const committed = state.players.reduce((sum, player) => sum + player.betThisRound, 0)
+    const untouched = state.communityCards.length === 0 && state.pot === committed
+    setStartStacks({
+      hand: state.handNumber,
+      stacks: untouched
+        ? Object.fromEntries(state.players.map((player) => [player.playerId, player.chipStack + player.betThisRound]))
+        : {},
+    })
+  }, [state, startStacks?.hand])
+
+  // A fresh deal plays the dealer animation only when this tab saw the hand begin (never on refresh).
+  useLayoutEffect(() => {
+    if (!state) return
+    const previous = prevHandRef.current
+    prevHandRef.current = state.handNumber
+    if (state.handNumber === 0 || isHandIdle(state.status) || dealPlayedRef.current === state.handNumber) return
+    const watchedStart =
+      (previous !== null && previous !== state.handNumber) ||
+      (previous === null && state.events.at(-1)?.type.toUpperCase() === 'HAND_STARTED')
+    dealPlayedRef.current = state.handNumber
+    if (!watchedStart) return
+
+    const inHand = [...state.players].filter((player) => player.holeCards.length > 0)
+    const ordered = [...inHand].sort(
+      (a, b) =>
+        ((a.seat - state.dealerSeat - 1 + maxPlayers) % maxPlayers) -
+        ((b.seat - state.dealerSeat - 1 + maxPlayers) % maxPlayers),
+    )
+    const targets = ordered.map((player) =>
+      player.playerId === user?.id ? { id: 'self', selector: '#seat-self' } : { id: player.playerId },
+    )
+    setResultOpenFor(null)
+    setDealTargets(targets)
+    setDealtCounts({})
+    setDealPlaying(true)
+  }, [state, maxPlayers, user?.id])
+
+  // Hand finished: hold the showdown on the felt briefly, then open the result page.
+  useEffect(() => {
+    if (!state || !complete || dealPlaying) return
+    if (resultOpenFor === state.handNumber || dismissedResult === state.handNumber) return
+    const hand = state.handNumber
+    const timer = window.setTimeout(() => setResultOpenFor(hand), RESULT_REVEAL_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [state, complete, dealPlaying, resultOpenFor, dismissedResult])
 
   useEffect(() => {
-    if (!historyOpen) {
+    if (state?.showdown.length) soundEngine.play('declare')
+  }, [state?.showdown.length])
+
+  // Lobby filling up: countdown and "X is added" toasts, like the Rummy waiting room.
+  useEffect(() => {
+    if (!waitingForPlayers) return
+    setWaitSeconds(JOIN_WAIT_SECONDS)
+    const timer = window.setInterval(() => setWaitSeconds((seconds) => (seconds > 1 ? seconds - 1 : 1)), 1000)
+    return () => window.clearInterval(timer)
+  }, [waitingForPlayers, gameId])
+
+  useEffect(() => {
+    if (!state || !waitingForPlayers) {
+      seenPlayersRef.current = null
       return
     }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setHistoryOpen(false)
-      }
+    const ids = state.players.filter((player) => player.playerId !== user?.id)
+    if (seenPlayersRef.current === null) {
+      seenPlayersRef.current = new Set(ids.map((player) => player.playerId))
+      return
     }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [historyOpen])
+    const fresh = ids.filter((player) => !seenPlayersRef.current!.has(player.playerId))
+    fresh.forEach((player) => seenPlayersRef.current!.add(player.playerId))
+    const latest = fresh.at(-1)
+    if (latest) setArrivalNotice(`${seatNameMap(state.players).get(latest.playerId) ?? displaySeatName(latest.username)} is added`)
+  }, [state, waitingForPlayers, user?.id])
 
-  async function onReconnect() {
-    setError(null)
-    try {
-      await connect(gameId)
-      await load(true)
-    } catch (cause: unknown) {
-      setError(apiErrorMessage(cause))
-    }
-  }
+  useEffect(() => {
+    if (!arrivalNotice) return
+    const timer = window.setTimeout(() => setArrivalNotice(null), 1200)
+    return () => window.clearTimeout(timer)
+  }, [arrivalNotice])
+
+  useEffect(() => {
+    if (viewer?.isTurn && !dealPlaying && !idle) soundEngine.play('turn')
+  }, [viewer?.isTurn, dealPlaying, idle])
 
   function onPlayerAction(request: GameActionRequest) {
-    setError(null)
     setLastError(null)
     setSending(true)
     try {
       sendAction(gameId, request)
     } catch (cause: unknown) {
       setSending(false)
-      setError(apiErrorMessage(cause))
+      setToast(apiErrorMessage(cause))
     }
   }
 
-  async function onStart() {
-    setBusy(true)
-    setError(null)
-    try {
-      const snapshot = await startTable(gameId)
-      setGameState(snapshot)
-    } catch (cause: unknown) {
-      setError(apiErrorMessage(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function onLeave() {
-    stopAllSounds()
-    if (!seated) {
-      navigate(paths.home)
-      return
-    }
-    leaveRequested.current = true
-    setBusy(true)
-    setError(null)
-    try {
-      const detail = await leaveTable(gameId)
-      upsertTable(detail)
-      navigate(paths.home)
-    } catch (cause: unknown) {
-      leaveRequested.current = false
-      setError(apiErrorMessage(cause))
-      setBusy(false)
-    }
-  }
-
-  async function onExitGame() {
+  async function onLeaveTable() {
+    soundEngine.play('click')
     stopAllSounds()
     leaveRequested.current = true
     setBusy(true)
-    setError(null)
     try {
       if (seated) {
         const detail = await leaveTable(gameId)
         upsertTable(detail)
       }
     } catch {
-      // Exit is best-effort: stale seating or a dropped connection must not trap
-      // the player on the game screen.
+      // Leaving is best-effort: a stale seat or dropped socket must not trap the player at the table.
     } finally {
       setCurrentTable(null)
       resetGame()
@@ -241,186 +335,333 @@ export function GamePage() {
     }
   }
 
-  async function onJoin() {
-    setBusy(true)
-    setError(null)
-    try {
-      const detail = await joinTable(gameId)
-      setTable(detail)
-      upsertTable(detail)
-      const snapshot = await getTableState(gameId)
-      setGameState(snapshot)
-    } catch (cause: unknown) {
-      setError(apiErrorMessage(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const title = state?.name ?? table?.name ?? 'Poker table'
-  const variant = formatVariant(state?.variant ?? table?.variant ?? TABLE_DEFAULTS.variant)
+  const variant = state?.variant ?? table?.variant ?? TABLE_DEFAULTS.variant
+  const variantName = variantTitle(variant)
   const smallBlind = state?.smallBlind ?? table?.smallBlind ?? TABLE_DEFAULTS.smallBlind
   const bigBlind = state?.bigBlind ?? table?.bigBlind ?? TABLE_DEFAULTS.bigBlind
-  const street = formatStreet(state?.bettingRound === 'NONE' ? state.status : (state?.bettingRound ?? table?.status ?? 'WAITING'))
-  const handNumber = state?.handNumber ?? 0
+  const street = formatStreet(state?.bettingRound === 'NONE' || !state ? (state?.status ?? 'WAITING') : state.bettingRound)
   const online = connectionStatus === 'connected'
 
-  async function onToggleFullscreen() {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen()
-      } else {
-        await document.documentElement.requestFullscreen()
-      }
-    } catch {
-      // Browsers can reject fullscreen when it is unavailable or not user-initiated.
+  const opponents = useMemo(() => {
+    const players = state?.players ?? []
+    const viewerSeat = viewer?.seat ?? -1
+    const offset = (seat: number) => (seat - viewerSeat - 1 + maxPlayers * 2) % maxPlayers
+    return players.filter((player) => player.playerId !== user?.id).sort((a, b) => offset(a.seat) - offset(b.seat))
+  }, [state?.players, viewer?.seat, maxPlayers, user?.id])
+
+  const seatSlots: Array<{ key: string; seat: number; player?: PlayerView; position: SeatPosition }> = useMemo(() => {
+    if (waitingForPlayers) {
+      const viewerSeat = viewer?.seat ?? 0
+      const count = Math.max(1, maxPlayers - 1)
+      return Array.from({ length: count }, (_, index) => {
+        const seat = (viewerSeat + 1 + index) % maxPlayers
+        return {
+          key: `seat-${seat}`,
+          seat,
+          player: state?.players.find((player) => player.seat === seat && player.playerId !== user?.id),
+          position: perimeterPosition(index, count),
+        }
+      })
     }
+    return opponents.map((player, index) => ({
+      key: player.playerId,
+      seat: player.seat,
+      player,
+      position: perimeterPosition(index, opponents.length),
+    }))
+  }, [waitingForPlayers, viewer?.seat, maxPlayers, state?.players, opponents, user?.id])
+
+  const drawMode = state?.status === 'DRAW'
+  const viewerCards = viewer?.holeCards ?? []
+  const viewerShowdown = viewer && state ? showdownFor(viewer.playerId, state.showdown) : undefined
+  const viewerBadge = !viewer
+    ? null
+    : winners.has(viewer.playerId)
+      ? 'WON'
+      : viewer.folded && !idle
+        ? 'FOLD'
+        : viewer.allIn
+          ? 'ALL-IN'
+          : handOver
+            ? 'LOST'
+            : null
+  const handStart = startStacks?.hand === state?.handNumber ? startStacks : null
+  const viewerStart = viewer ? handStart?.stacks[viewer.playerId] : undefined
+  const committedThisHand =
+    viewer && viewerStart !== undefined ? viewerStart - viewer.chipStack : (viewer?.betThisRound ?? 0)
+  const handLive = Boolean(viewer && !idle && !viewer.folded && !complete)
+  const showResult = Boolean(state && seated && resultOpenFor === state.handNumber && complete)
+
+  if (!state) {
+    return (
+      <div className="game-frame" style={{ display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center', color: '#e2e8f0', maxWidth: 360, padding: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>{loadError ? 'Could not open table' : 'Loading table…'}</div>
+          <div style={{ marginTop: 8, fontSize: 13, color: '#94a3b8' }}>
+            {loadError ?? 'Taking your seat — hang tight.'}
+          </div>
+          {loadError && !loading && (
+            <button type="button" className="royal-btn-gold" style={{ marginTop: 16 }} onClick={() => navigate(paths.home)}>
+              Back to lobby
+            </button>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
-    <main className="relative flex h-full min-h-0 flex-col overflow-hidden">
-      <h1 className="sr-only">{title}</h1>
-      <span className="sr-only" data-testid="ws-status">
-        {connectionLabel(connectionStatus)}
-      </span>
+    <LandscapeGate enabled hideFloatingBadge>
+      <div className="game-frame game-frame--board-only">
+        <h1 className="sr-only">{state.name}</h1>
+        <span className="sr-only" data-testid="ws-status">
+          {connectionLabel(connectionStatus)}
+        </span>
 
-      <div className="relative min-h-0 flex-1">
-        <section className="absolute inset-0 overflow-hidden">
-          {loading && !state ? (
-            <p className="absolute inset-0 m-auto h-fit text-center text-sm text-emerald-200/70">Loading table…</p>
-          ) : state ? (
-            <PokerTable
-              state={state}
-              maxPlayers={maxPlayers}
-              viewerId={user?.id}
-              compact
-              onDealingChange={setDealingCards}
-              onSound={playSound}
-            />
-          ) : (
-            <p className="absolute inset-0 m-auto h-fit text-center text-sm text-emerald-200/70">Table could not be loaded.</p>
-          )}
-        </section>
-
-        <div className="game-hud-info absolute left-2 top-2 z-20">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${online ? 'bg-emerald-400 shadow-[0_0_7px_#34d399]' : 'bg-amber-400'}`}
-              title={connectionLabel(connectionStatus)}
-            />
-            <div className="min-w-0">
-              <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-[#f5df9b]">{variant}</p>
-              <p className="truncate text-[9px] text-white/65">
-                {smallBlind}/{bigBlind} · {street} · Hand {handNumber || '—'}
-              </p>
-            </div>
+        {toast && (
+          <div className="board-error-toast" role="alert">
+            <AlertCircle size={16} />
+            <span>{toast}</span>
           </div>
-        </div>
+        )}
 
-        <div className="game-hud-actions absolute right-2 top-2 z-30 flex flex-wrap justify-end gap-1">
-          <button className="game-hud-button" type="button" onClick={() => setHistoryOpen((open) => !open)}>
-            History
-          </button>
-          <button
-            className="game-hud-button game-hud-button--exit"
-            type="button"
-            disabled={busy}
-            onClick={() => setLeaveModalOpen(true)}
-          >
-            Leave Table
-          </button>
-          <button className="game-hud-button" type="button" disabled={loading} onClick={() => void load()}>
-            Refresh
-          </button>
-          <button className="game-hud-button" type="button" onClick={() => void onToggleFullscreen()}>
-            {fullscreen ? 'Exit full screen' : 'Full screen'}
-          </button>
-          <button
-            className={`game-hud-button ${soundEnabled ? 'game-hud-button--sound-on' : ''}`}
-            type="button"
-            aria-pressed={soundEnabled}
-            onClick={toggleSound}
-          >
-            {soundEnabled ? 'Sound on' : 'Sound off'}
-          </button>
-          {connectionStatus === 'disconnected' || connectionStatus === 'error' ? (
-            <Button className="!rounded-full !bg-amber-700/80 !px-2.5 !py-1 !text-[10px]" variant="ghost" onClick={() => void onReconnect()}>
-              Reconnect
-            </Button>
-          ) : null}
-        </div>
-
-        {historyOpen ? (
-          <div className="absolute inset-0 z-40 bg-black/35" role="presentation" onClick={() => setHistoryOpen(false)}>
-            <div
-              className="absolute bottom-2 right-2 top-12 w-[min(18rem,calc(100%-1rem))]"
-              role="dialog"
-              aria-label="Hand history"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <button
-                className="absolute right-2 top-1 z-10 rounded px-1.5 py-0.5 text-xs text-white/70 hover:bg-white/10 hover:text-white"
-                type="button"
-                aria-label="Close history"
-                onClick={() => setHistoryOpen(false)}
-              >
-                ✕
-              </button>
-              <GameLog events={state?.events ?? []} players={state?.players ?? []} compact />
-            </div>
+        {waitingForPlayers && arrivalNotice && (
+          <div className="board-arrival-toast" role="status">
+            {arrivalNotice}
           </div>
-        ) : null}
+        )}
 
-        <div className="pointer-events-none absolute inset-0 z-30">
-          <ActionPanel
-            idle={idle}
-            complete={hasHandResult(state)}
-            isViewerTurn={Boolean(viewer?.isTurn)}
-            waitingFor={actor ? displaySeatName(actor.username) : undefined}
-            legal={state?.legalActions}
-            holeCards={viewer?.holeCards}
-            drawMode={state?.status === 'DRAW'}
-            connected={connectionStatus === 'connected'}
-            sending={sending}
-            dealing={dealingCards}
-            compact
-            onAction={onPlayerAction}
-          />
-        </div>
-      </div>
+        <main className={`casino-table${dealPlaying ? ' deal-in-progress' : ''}`}>
+          <div className="casino-table-stage" id="game-felt-table">
+            <div className="board-hud" aria-label="Table status">
+              <div className="board-info-plate">
+                <div className="board-info-row">
+                  <span className="board-info-variant">
+                    <span className="board-info-variant-title">{variantName}</span>
+                    <span className="board-info-variant-stake">
+                      {' '}
+                      · Blinds {formatChipCount(smallBlind)}/{formatChipCount(bigBlind)}
+                    </span>
+                    <span className="board-info-variant-seats"> · {maxPlayers} Players</span>
+                  </span>
+                  {state.handNumber > 0 && (
+                    <>
+                      <span className="board-info-sep" aria-hidden />
+                      <span className="board-info-deal">
+                        <span className="board-info-deal-full">
+                          HAND #{state.handNumber} · {street.toUpperCase()}
+                        </span>
+                        <span className="board-info-deal-short">#{state.handNumber}</span>
+                      </span>
+                    </>
+                  )}
+                  <span className="board-info-sep" aria-hidden />
+                  <span className="board-info-pot">
+                    <span className="board-info-pot-label">POT </span>
+                    <span className="royal-coin" aria-hidden /> {formatChipCount(state.pot)}
+                  </span>
+                  <span className={`board-info-live${online ? ' ok' : ''}`}>
+                    <Wifi size={10} />
+                    <span className="board-info-live-text">{online ? 'Live' : '…'}</span>
+                  </span>
+                </div>
+              </div>
+              <div className="board-hud-right">
+                <FlipButton />
+                <SoundToggle compact />
+                <FullscreenToggle compact />
+                <button
+                  type="button"
+                  className="board-hud-menu"
+                  title="Table Menu"
+                  aria-label="Table Menu"
+                  onClick={() => {
+                    soundEngine.play('click')
+                    setMenuOpen(true)
+                  }}
+                >
+                  <Menu size={16} />
+                </button>
+              </div>
+            </div>
 
-      <Modal
-        title="Leave this table?"
-        open={leaveModalOpen}
-        onClose={() => setLeaveModalOpen(false)}
-      >
-        <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-emerald-100/80">
-            If you leave during an active hand, your hand will be folded and chips already committed to the pot will not be returned.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => setLeaveModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              disabled={busy}
-              onClick={() => {
-                setLeaveModalOpen(false)
-                void onExitGame()
+            <div className="table-perimeter-seats" aria-label="Opponents">
+              {seatSlots.length === 0 ? (
+                <div className="opponent-waiting-pod">
+                  <div className="opponent-waiting-dot" />
+                  Waiting for opponents…
+                </div>
+              ) : (
+                seatSlots.map((slot) => {
+                  const player = slot.player
+                  const won = Boolean(player && winners.has(player.playerId))
+                  return (
+                    <OpponentPod
+                      key={slot.key}
+                      seatNumber={slot.seat}
+                      position={slot.position}
+                      player={player}
+                      name={player ? nameFor(player) : undefined}
+                      dealer={!idle && state.dealerSeat === slot.seat}
+                      blind={blindTag(state, slot.seat)}
+                      isTurn={Boolean(player?.isTurn) && !dealPlaying && !handOver}
+                      turnDeadline={state.turnDeadline ?? null}
+                      winner={won}
+                      lost={Boolean(player && handOver && !won && !player.folded)}
+                      revealed={player ? (showdownFor(player.playerId, state.showdown)?.holeCards ?? []) : []}
+                      displayCount={dealPlaying && player ? (dealtCounts?.[player.playerId] ?? 0) : undefined}
+                    />
+                  )
+                })
+              )}
+            </div>
+
+            <section className="table-center-wrap" aria-label="Table Center">
+              <BoardCenter
+                variant={variant}
+                communityCards={state.communityCards}
+                pot={state.pot}
+                waiting={waitingForPlayers}
+              />
+              {waitingForPlayers && (
+                <div className="join-wait" role="status">
+                  <div className="join-wait-sec">
+                    {waitSeconds}
+                    <span>s</span>
+                  </div>
+                  <div className="join-wait-copy">
+                    <p className="join-wait-kicker">Players are joining</p>
+                    <p className="join-wait-line">Game starts when the table is full</p>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="table-player-station" aria-label="Player Station">
+              <HeroHand
+                cards={viewerCards}
+                arrivingCount={dealPlaying ? (dealtCounts?.self ?? 0) : undefined}
+                folded={Boolean(viewer?.folded) && !idle}
+                waitingForPlayers={waitingForPlayers}
+                label={viewerShowdown?.description}
+                selectable={Boolean(viewer?.isTurn) && !dealPlaying && (state.legalActions?.actions ?? []).includes('DISCARD')}
+                selected={selected}
+                onToggle={(index) => {
+                  const limit = drawMode ? state.legalActions.maxBetOrRaiseTo : 1
+                  setSelected((current) => {
+                    if (current.includes(index)) return current.filter((value) => value !== index)
+                    if (!drawMode) return [index]
+                    return current.length >= limit ? current : [...current, index].sort((a, b) => a - b)
+                  })
+                }}
+              />
+              <ControlBar
+                displayName={displayName}
+                avatarId={avatarId}
+                seated={seated}
+                chipStack={viewer?.chipStack ?? 0}
+                committed={viewer?.betThisRound ?? 0}
+                street={street}
+                dealer={Boolean(viewer && !idle && state.dealerSeat === viewer.seat)}
+                blind={viewer ? blindTag(state, viewer.seat) : null}
+                badge={viewerBadge}
+                isMyTurn={Boolean(viewer?.isTurn) && !handOver}
+                turnDeadline={state.turnDeadline ?? null}
+                dealing={dealPlaying}
+                idle={idle}
+                complete={complete}
+                connected={online}
+                sending={sending}
+                waitingFor={actor ? nameFor(actor) : undefined}
+                legal={state.legalActions}
+                pot={state.pot}
+                drawMode={drawMode}
+                selected={selected}
+                onClearSelection={() => setSelected([])}
+                onAction={onPlayerAction}
+                onOpenHistory={() => {
+                  soundEngine.play('click')
+                  setHistoryOpen(true)
+                }}
+                onOpenRankings={() => {
+                  soundEngine.play('click')
+                  setRankingsOpen(true)
+                }}
+                onBackToLobby={() => {
+                  soundEngine.play('click')
+                  navigate(paths.home, { replace: true })
+                }}
+              />
+            </section>
+
+            <DealAnimation
+              active={dealPlaying}
+              targets={dealTargets}
+              cardsPerPlayer={initialHoleCards(variant)}
+              onCardLanded={(targetId) =>
+                setDealtCounts((counts) => (counts ? { ...counts, [targetId]: (counts[targetId] ?? 0) + 1 } : counts))
+              }
+              onComplete={() => {
+                setDealPlaying(false)
+                setDealtCounts(null)
               }}
-            >
-              Leave Table
-            </Button>
+            />
           </div>
-        </div>
-      </Modal>
-    </main>
+        </main>
+
+        {menuOpen && (
+          <TableMenu
+            variantName={variantName}
+            maxPlayers={maxPlayers}
+            smallBlind={smallBlind}
+            bigBlind={bigBlind}
+            tableId={state.tableId}
+            handLive={handLive}
+            committed={Math.max(0, committedThisHand)}
+            busy={busy}
+            onResume={() => setMenuOpen(false)}
+            onLeave={() => {
+              setMenuOpen(false)
+              void onLeaveTable()
+            }}
+          />
+        )}
+
+        {historyOpen && (
+          <HistorySheet
+            events={state.events}
+            players={state.players}
+            names={seatNames}
+            viewerUsername={user?.username}
+            viewerName={displayName}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
+
+        {rankingsOpen && <RankingsSheet variant={variant} onClose={() => setRankingsOpen(false)} />}
+
+        {showResult && (
+          <HandResultPage
+            key={state.handNumber}
+            state={state}
+            viewerId={user?.id}
+            viewerName={displayName}
+            names={seatNames}
+            avatarId={avatarId}
+            variantName={variantName}
+            startStacks={
+              handStart && Object.keys(handStart.stacks).length > 0 ? handStart.stacks : null
+            }
+            countdownSeconds={Math.max(1, RESULT_COUNTDOWN_SECONDS - Math.round(RESULT_REVEAL_DELAY_MS / 1000))}
+            busy={busy}
+            onContinue={() => {
+              setDismissedResult(state.handNumber)
+              setResultOpenFor(null)
+            }}
+            onLeave={() => void onLeaveTable()}
+          />
+        )}
+      </div>
+    </LandscapeGate>
   )
 }

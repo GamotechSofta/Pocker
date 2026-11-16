@@ -59,6 +59,8 @@ export type TableState = {
   showdown: ShowdownPlayer[]
   legalActions: LegalActions
   viewerPlayerId: string
+  /** ISO time the player to act must move by; the server auto checks/folds after it. */
+  turnDeadline?: string | null
 }
 
 export type GameActionRequest = {

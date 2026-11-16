@@ -181,7 +181,7 @@ public final class GameState {
                 || status == GameStatus.RIVER;
     }
 
-    void setStatus(GameStatus status) {
+    public void setStatus(GameStatus status) {
         this.status = status;
     }
 

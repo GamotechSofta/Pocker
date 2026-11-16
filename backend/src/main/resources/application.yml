@@ -4,10 +4,11 @@ spring:
   profiles:
     default: dev
   mongodb:
-    uri: ${MONGODB_URI:mongodb://localhost:27017/poker}
+    # Prefer MONGODB_URI from .env / OS env; falls back to local Mongo.
+    uri: ${MONGODB_URI:${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/poker}}
     representation:
       uuid: standard
-  data:
+    data:
     mongodb:
       auto-index-creation: true
 
@@ -47,6 +48,12 @@ app:
     starting-chips: ${STARTING_CHIPS:1000}
     max-players: ${MAX_PLAYERS:6}
     max-draw-count: ${MAX_DRAW_COUNT:5}
+    turn-seconds: ${TURN_SECONDS:30}
+  wallet:
+    starting-balance: ${WALLET_STARTING_BALANCE:10000}
+    add-cash-amount: ${WALLET_ADD_CASH_AMOUNT:1000}
+    max-add-cash-amount: ${WALLET_MAX_ADD_CASH:50000}
+    rake-rate: ${WALLET_RAKE_RATE:0.15}
 
 springdoc:
   api-docs:

@@ -10,6 +10,16 @@ public class TableProperties {
     private int startingChips = 1000;
     private int maxPlayers = 6;
     private int maxDrawCount = 5;
+    /** Seconds a player has to act before the server checks or folds for them. */
+    private int turnSeconds = 30;
+
+    public int getTurnSeconds() {
+        return turnSeconds;
+    }
+
+    public void setTurnSeconds(int turnSeconds) {
+        this.turnSeconds = turnSeconds;
+    }
 
     public int getSmallBlind() {
         return smallBlind;

@@ -1,0 +1,917 @@
+/* Poker pieces drawn in the Royal (Rummy) look: logo, game cards, board cards, pot, bets. */
+
+/* ========== LOGO ========== */
+.royal-poker-logo {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 6px 10px 2px 46px;
+  height: clamp(40px, 6vh, 52px);
+  user-select: none;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.65));
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.royal-poker-logo:hover {
+  transform: scale(1.04);
+}
+
+.royal-poker-logo--lg {
+  height: 64px;
+  transform: scale(1.25);
+}
+
+.royal-poker-logo__cards {
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  width: 44px;
+  height: 40px;
+}
+
+.royal-poker-logo__cards i {
+  position: absolute;
+  bottom: 0;
+  width: 24px;
+  height: 34px;
+  border-radius: 4px;
+  background: linear-gradient(160deg, #ffffff, #e9e4d8);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  color: #111827;
+  font: 900 11px/1 var(--font-sans);
+  font-style: normal;
+  padding: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.royal-poker-logo__cards i:first-child {
+  left: 2px;
+  transform: rotate(-14deg);
+}
+
+.royal-poker-logo__cards i:last-child {
+  left: 16px;
+  transform: rotate(10deg);
+}
+
+.royal-poker-logo__cards i.is-red {
+  color: #c1121f;
+}
+
+.royal-poker-logo__crown {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  transform: translateX(-10%);
+  font-size: 22px;
+  line-height: 1;
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.6), 0 2px 0 #92400e;
+}
+
+.royal-poker-logo__word {
+  font-family: var(--font-royal);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  background: linear-gradient(180deg, #fff7c2 0%, #fcd34d 38%, #d97706 62%, #fde68a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 0.6px rgba(120, 53, 15, 0.9);
+}
+
+.royal-poker-logo__word--royal {
+  font-size: clamp(20px, 3.2vh, 28px);
+}
+
+.royal-poker-logo__word--poker {
+  font-size: clamp(16px, 2.6vh, 22px);
+  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 55%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 0.6px rgba(30, 41, 59, 0.9);
+}
+
+/* ========== GAME CARDS (5 poker games) ========== */
+.variant-cards-row--five {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 1160px;
+  --per-row: 5;
+}
+
+.variant-cards-row--five > .variant-banner {
+  flex: 0 0 calc((100% - (var(--per-row) - 1) * 12px) / var(--per-row));
+}
+
+@media (max-width: 900px) {
+  .variant-cards-row--five {
+    max-width: 640px;
+    --per-row: 3;
+  }
+
+  .variant-cards-row--five > .variant-banner {
+    flex-basis: calc((100% - (var(--per-row) - 1) * 10px) / var(--per-row));
+  }
+}
+
+@media (max-width: 520px) {
+  .variant-cards-row--five {
+    --per-row: 2;
+  }
+}
+
+.poker-banner {
+  aspect-ratio: 3 / 2;
+  isolation: isolate;
+  overflow: hidden;
+  container-type: inline-size;
+  --banner-a: #0b3d2a;
+  --banner-b: #04170f;
+  background:
+    radial-gradient(120% 90% at 50% 100%, rgba(255, 214, 120, 0.12), transparent 55%),
+    linear-gradient(155deg, var(--banner-a) 0%, var(--banner-b) 100%);
+}
+
+.poker-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(115deg, transparent 0 38%, rgba(212, 175, 55, 0.35) 38.4%, transparent 39% 100%),
+    linear-gradient(115deg, transparent 0 62%, rgba(212, 175, 55, 0.22) 62.3%, transparent 62.8% 100%);
+}
+
+.poker-banner--emerald { --banner-a: #0e4a32; --banner-b: #03140c; }
+.poker-banner--crimson { --banner-a: #7a0f17; --banner-b: #24040a; }
+.poker-banner--sapphire { --banner-a: #12306b; --banner-b: #050d24; }
+.poker-banner--amber { --banner-a: #6b3d07; --banner-b: #1f1003; }
+.poker-banner--violet { --banner-a: #4a1670; --banner-b: #13051f; }
+
+.poker-banner__suit {
+  position: absolute;
+  font-size: 26cqw;
+  line-height: 1;
+  color: rgba(212, 175, 55, 0.14);
+  pointer-events: none;
+}
+
+.poker-banner__suit--tl { left: 4%; top: 2%; }
+.poker-banner__suit--br { right: 4%; top: 6%; color: rgba(212, 175, 55, 0.1); }
+
+.poker-banner__fan {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  z-index: 1;
+}
+
+.poker-banner__card {
+  width: 15cqw;
+  height: 21cqw;
+  margin: 0 -2.4cqw;
+  border-radius: 1.4cqw;
+  background: linear-gradient(165deg, #ffffff 0%, #f1ede4 100%);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1.2cqw 2.4cqw rgba(0, 0, 0, 0.45);
+  color: #111827;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6cqw;
+  transform: rotate(var(--fan-rot, 0deg)) translateY(var(--fan-y, 0px));
+  transform-origin: 50% 120%;
+  transition: transform 0.28s ease;
+}
+
+.poker-banner__card.is-red {
+  color: #c1121f;
+}
+
+.poker-banner__card b {
+  font: 900 6cqw/1 var(--font-sans);
+}
+
+.poker-banner__card i {
+  font-style: normal;
+  font-size: 6.6cqw;
+  line-height: 1;
+}
+
+.poker-banner:hover .poker-banner__card {
+  transform: rotate(calc(var(--fan-rot, 0deg) * 1.35)) translateY(calc(var(--fan-y, 0px) - 1.4cqw));
+}
+
+.poker-banner__chip {
+  position: absolute;
+  z-index: 2;
+  width: 17cqw;
+  height: 17cqw;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #111 0 36%, transparent 37%),
+    repeating-conic-gradient(#d4a017 0 22.5deg, #111 22.5deg 45deg);
+  border: 0.8cqw solid #d4a017;
+  box-shadow: 0 1cqw 2cqw rgba(0, 0, 0, 0.55), inset 0 0 0 1.2cqw rgba(0, 0, 0, 0.35);
+}
+
+.poker-banner__chip::after {
+  content: '♠';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #e5b93a;
+  font-size: 6cqw;
+}
+
+.poker-banner__chip--left { left: 6%; bottom: 14%; transform: rotate(-12deg); }
+.poker-banner__chip--right { right: 6%; bottom: 8%; transform: rotate(14deg); }
+
+.poker-banner__plate {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 10%;
+  transform: translateX(-50%);
+  min-width: 62%;
+  padding: 2cqw 5cqw 3.4cqw;
+  border-radius: 4cqw;
+  background: linear-gradient(180deg, rgba(10, 30, 20, 0.92), rgba(4, 12, 8, 0.96));
+  border: 0.6cqw solid #d4af37;
+  box-shadow: 0 0 0 0.4cqw rgba(0, 0, 0, 0.6), 0 1.6cqw 3cqw rgba(0, 0, 0, 0.6), inset 0 0 3cqw rgba(212, 175, 55, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.poker-banner__title {
+  font-family: var(--font-royal);
+  font-weight: 900;
+  font-size: 10cqw;
+  line-height: 1.05;
+  white-space: nowrap;
+  background: linear-gradient(180deg, #fff6c4 0%, #fcd34d 40%, #c2830c 70%, #fde68a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0.4cqw 0 rgba(0, 0, 0, 0.6));
+}
+
+.poker-banner__subtitle {
+  margin-top: 0.6cqw;
+  font: 800 3.8cqw/1 var(--font-sans);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #e5e7eb;
+}
+
+.poker-banner__diamond {
+  position: absolute;
+  bottom: -3.4cqw;
+  width: 6.4cqw;
+  height: 6.4cqw;
+  display: grid;
+  place-items: center;
+  transform: rotate(45deg);
+  background: #0b1a12;
+  border: 0.5cqw solid #d4af37;
+  color: #e5b93a;
+  font-size: 3.2cqw;
+}
+
+.poker-banner__tagline {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: 1.6%;
+  text-align: center;
+  font: 700 2.9cqw/1 var(--font-sans);
+  letter-spacing: 0.06em;
+  color: rgba(254, 243, 199, 0.78);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.poker-banner:hover .poker-banner__tagline,
+.poker-banner:focus-visible .poker-banner__tagline {
+  opacity: 1;
+}
+
+/* ========== SEATS ========== */
+.royal-empty-seat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  z-index: 8;
+}
+
+.royal-empty-seat__circle {
+  width: var(--seat-avatar, 52px);
+  height: var(--seat-avatar, 52px);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(28, 48, 36, 0.95) 0%, rgba(8, 18, 12, 0.98) 100%);
+  border: 2px dashed rgba(251, 191, 36, 0.8);
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.35), 0 4px 14px rgba(0, 0, 0, 0.7), inset 0 0 14px rgba(251, 191, 36, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fbbf24;
+}
+
+.royal-empty-seat__plate {
+  background: linear-gradient(180deg, rgba(20, 36, 26, 0.94) 0%, rgba(8, 18, 12, 0.98) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 12px;
+  padding: 3px 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65), 0 0 10px rgba(251, 191, 36, 0.18);
+  min-width: 82px;
+  text-align: center;
+}
+
+.royal-empty-seat__name {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #fef08a;
+  white-space: nowrap;
+}
+
+.royal-empty-seat__state {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.royal-empty-seat__state i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 6px #fbbf24;
+}
+
+.royal-seat-glow {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: pulse 1.8s infinite ease-in-out;
+  z-index: 1;
+}
+
+.royal-avatar-clip {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.royal-avatar-clip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.royal-seat--folded .opponent-avatar-bezel {
+  filter: grayscale(0.7) brightness(0.75);
+}
+
+.royal-nameplate {
+  backdrop-filter: blur(12px);
+  padding: 2px 10px;
+  border-radius: 14px;
+  text-align: center;
+  min-width: 92px;
+  max-width: 125px;
+}
+
+.royal-nameplate__name {
+  font-size: var(--ui-font-sm, 11px);
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.royal-nameplate__chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1.15;
+  font-size: var(--ui-font-sm, 10.5px);
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.royal-coin {
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  vertical-align: -0.12em;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #fde68a 0 30%, transparent 31%),
+    repeating-conic-gradient(#f59e0b 0 30deg, #fef3c7 30deg 60deg);
+  border: 1px solid #b45309;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  flex-shrink: 0;
+}
+
+.royal-blind-tag {
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #0b1a12;
+  background: linear-gradient(180deg, #fef3c7, #fbbf24);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.avatar-status-badge--allin {
+  background: linear-gradient(135deg, #db2777 0%, #9d174d 100%);
+  color: #fff;
+  border: 1.5px solid #f9a8d4;
+  box-shadow: 0 0 12px rgba(219, 39, 119, 0.75), 0 3px 6px rgba(0, 0, 0, 0.7);
+}
+
+.royal-showdown-cards {
+  display: flex;
+  gap: 2px;
+  --card-w: clamp(22px, 2.6cqw, 34px);
+  --card-h: calc(var(--card-w) * 1.4);
+}
+
+.royal-showdown-cards .rummy-card {
+  animation: royal-flip-in 0.45s ease-out both;
+}
+
+/* Chips a seat has put in on this street, pushed toward the pot. */
+.royal-bet-pill {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 3px;
+  border-radius: 999px;
+  background: rgba(6, 12, 9, 0.9);
+  border: 1px solid rgba(212, 175, 55, 0.55);
+  color: #fef08a;
+  font-size: 10.5px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+  animation: royal-bet-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  z-index: 12;
+}
+
+.royal-bet-pill__chip {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #b91c1c 0 34%, transparent 35%),
+    repeating-conic-gradient(#fef3c7 0 30deg, #b91c1c 30deg 60deg);
+  border: 1.5px solid #fef3c7;
+}
+
+.royal-bet-pill--left,
+.royal-bet-pill--bottom-left {
+  left: calc(100% + 10px);
+  top: 62%;
+}
+
+.royal-bet-pill--right,
+.royal-bet-pill--bottom-right {
+  right: calc(100% + 10px);
+  top: 62%;
+}
+
+.royal-bet-pill--top {
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+}
+
+.royal-bet-pill--top-left {
+  left: calc(100% + 6px);
+  top: 72%;
+}
+
+.royal-bet-pill--top-right {
+  right: calc(100% + 6px);
+  top: 72%;
+}
+
+@keyframes royal-bet-in {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes royal-flip-in {
+  from {
+    opacity: 0;
+    transform: rotateY(90deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0deg);
+  }
+}
+
+/* ========== FELT CENTER ========== */
+/* The pot sits above the board cards, so the centre stack is taller than Rummy's piles. */
+.casino-table-stage > .table-center-wrap {
+  top: 46%;
+}
+
+.royal-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(4px, 1cqh, 10px);
+}
+
+.royal-pot {
+  margin: 0;
+  gap: 8px;
+  padding: 4px 16px 4px 8px;
+  font-size: var(--ui-font, 12px);
+}
+
+.royal-pot__stack {
+  position: relative;
+  width: 20px;
+  height: 18px;
+}
+
+.royal-pot__stack i {
+  position: absolute;
+  left: 0;
+  width: 20px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fde68a, #b45309);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.royal-pot__stack i:nth-child(1) { bottom: 0; }
+.royal-pot__stack i:nth-child(2) { bottom: 4px; background: linear-gradient(180deg, #fca5a5, #991b1b); }
+.royal-pot__stack i:nth-child(3) { bottom: 8px; }
+
+.royal-pot__label {
+  color: rgba(254, 243, 199, 0.7);
+  letter-spacing: 0.14em;
+}
+
+.royal-pot__amount {
+  font-size: 1.15em;
+  color: #fde68a;
+}
+
+.royal-pot.has-chips {
+  animation: royal-pot-bump 0.5s ease-out;
+}
+
+@keyframes royal-pot-bump {
+  40% {
+    transform: scale(1.08);
+  }
+}
+
+.royal-board__streets {
+  gap: clamp(8px, 1.6cqw, 22px);
+}
+
+.royal-board__cards {
+  gap: clamp(3px, 0.5cqw, 6px);
+}
+
+.royal-board__card {
+  cursor: default;
+  animation: royal-flip-in 0.5s ease-out both;
+}
+
+.royal-board__slot {
+  opacity: 0.55;
+}
+
+.royal-board__street {
+  font-size: var(--ui-font-sm, 10px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fef3c7;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(6, 10, 8, 0.75);
+  white-space: nowrap;
+}
+
+.royal-board__street span {
+  color: #fbbf24;
+  letter-spacing: 0.04em;
+}
+
+/* ========== HERO HAND ========== */
+.royal-hero-hand .player-hand-tray {
+  --royal-hero-gap: calc(var(--hand-card-w) * 0.12);
+  --hand-card-w: clamp(40px, min(6.2cqw, 11cqh), 76px);
+  --hand-card-h: calc(var(--hand-card-w) * 1.4);
+}
+
+.royal-hero-hand .rummy-card {
+  cursor: default;
+}
+
+.royal-hero-hand button.rummy-card {
+  cursor: pointer;
+}
+
+/* ========== CONTROL BAR ========== */
+.royal-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+  font-size: var(--ui-font, 12px);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.royal-status-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+.royal-status-pill--gold {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fef08a;
+}
+
+.royal-action--raise {
+  border-color: rgba(251, 191, 36, 0.55);
+  color: #fef08a;
+}
+
+.royal-action--raise.is-open,
+.royal-action--raise:hover:not(:disabled) {
+  background: rgba(251, 191, 36, 0.16);
+}
+
+.royal-action--allin {
+  background: linear-gradient(180deg, #be185d 0%, #831843 100%);
+  border-color: rgba(249, 168, 212, 0.55);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(219, 39, 119, 0.35);
+}
+
+.royal-action--allin:hover:not(:disabled) {
+  background: linear-gradient(180deg, #db2777 0%, #9d174d 100%);
+}
+
+.table-action-controls {
+  position: relative;
+}
+
+.royal-raise-panel {
+  position: absolute;
+  right: clamp(8px, 1.4cqw, 18px);
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  width: min(320px, 92%);
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(42, 10, 14, 0.97), rgba(14, 5, 8, 0.98));
+  border: 1px solid rgba(212, 175, 55, 0.55);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), inset 0 0 20px rgba(212, 175, 55, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: royal-bet-in 0.2s ease-out both;
+}
+
+.royal-raise-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(254, 243, 199, 0.75);
+}
+
+.royal-raise-panel__head strong {
+  font-size: 18px;
+  letter-spacing: 0;
+  color: #fde68a;
+}
+
+.royal-raise-panel__presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.royal-raise-panel__presets button {
+  padding: 6px 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.45);
+  color: #f3f4f6;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.royal-raise-panel__presets button.on,
+.royal-raise-panel__presets button:hover {
+  border-color: #fbbf24;
+  color: #fef08a;
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.royal-raise-panel__row {
+  display: flex;
+  gap: 8px;
+}
+
+.royal-raise-panel__input {
+  flex: 1;
+}
+
+.royal-raise-panel__input input {
+  width: 100%;
+  height: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.royal-raise-panel__input input[aria-invalid='true'] {
+  border-color: #f87171;
+}
+
+.royal-raise-panel__error {
+  margin: 0;
+  font-size: 11.5px;
+  color: #fca5a5;
+}
+
+.royal-raise-panel__range {
+  margin: 0;
+  font-size: 10.5px;
+  color: rgba(254, 243, 199, 0.55);
+  text-align: right;
+}
+
+/* ========== DIALOG LISTS ========== */
+.royal-dialog-card--wide {
+  max-width: 520px;
+}
+
+.royal-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.royal-history-list li {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.royal-history-type {
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fbbf24;
+}
+
+.royal-history-detail {
+  font-size: 12.5px;
+  color: #f1f5f9;
+}
+
+.royal-rank-list .royal-history-detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.royal-rank-list em {
+  font-style: normal;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.royal-history-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #cbd5e1;
+  text-align: center;
+}
+
+/* ========== RESULT PAGE ========== */
+.royal-next-deal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 5px 16px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fef08a;
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.royal-result-board {
+  display: flex;
+  gap: 6px;
+  --card-w: 46px;
+  --card-h: calc(var(--card-w) * 1.4);
+}
+
+/* Poker shows 2–5 hole cards: lay them side by side instead of Rummy's overlapped meld fans. */
+.result-page-screen .result-row-cards-tray {
+  --result-card-overlap: calc(var(--result-card-w) * 0.1) !important;
+}
+
+.result-page-screen .result-group-fan .result-card-slot:not(:last-child) .card-corner--br {
+  display: block;
+}
+
+.royal-result-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(212, 175, 55, 0.6);
+  flex-shrink: 0;
+}
+
+.mm-rematch-note {
+  margin: 0 auto 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.22), rgba(15, 23, 42, 0.92));
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  color: #fef08a;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}

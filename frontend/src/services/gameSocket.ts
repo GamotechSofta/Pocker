@@ -91,6 +91,8 @@ export class GameSocket {
           reject(new Error(message))
         },
         onWebSocketClose: () => {
+          this.tableSubscription = null
+          this.errorSubscription = null
           if (this.manualClose) {
             if (useGameStore.getState().connectionStatus !== 'error') {
               useGameStore.getState().setConnectionStatus('disconnected')
@@ -142,8 +144,20 @@ export class GameSocket {
   }
 
   private disconnectClient(deactivate: boolean): void {
-    this.tableSubscription?.unsubscribe()
-    this.errorSubscription?.unsubscribe()
+    try {
+      if (this.client?.connected) {
+        this.tableSubscription?.unsubscribe()
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (this.client?.connected) {
+        this.errorSubscription?.unsubscribe()
+      }
+    } catch {
+      // ignore
+    }
     this.tableSubscription = null
     this.errorSubscription = null
     const client = this.client
@@ -158,8 +172,22 @@ export class GameSocket {
     if (!this.client?.connected) {
       return
     }
-    this.tableSubscription?.unsubscribe()
-    this.errorSubscription?.unsubscribe()
+    try {
+      if (this.client?.connected) {
+        this.tableSubscription?.unsubscribe()
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      if (this.client?.connected) {
+        this.errorSubscription?.unsubscribe()
+      }
+    } catch {
+      // ignore
+    }
+    this.tableSubscription = null
+    this.errorSubscription = null
     if (this.tableId) {
       this.tableSubscription = this.client.subscribe(gameQueueDestination(this.tableId), applyMessage)
     }

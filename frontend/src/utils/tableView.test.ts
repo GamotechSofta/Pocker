@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseCard } from '@/utils/cards'
 import { legalActionNames } from '@/utils/legalActions'
 import { hasHandResult, resultWinners, winnerIds } from '@/utils/results'
-import { layoutSeatOrder, displaySeatName, isBotUsername } from '@/utils/seats'
+import { layoutSeatOrder, displaySeatName, isBotUsername, seatNameMap } from '@/utils/seats'
 import type { TableState } from '@/types/game'
 
 describe('card helpers', () => {
@@ -37,6 +37,18 @@ describe('seat layout', () => {
     expect(displaySeatName('bot_x5751')).toBe('Reyansh')
     expect(displaySeatName('player1')).toBe('player1')
     expect(displaySeatName('g_debe7c55aaf0')).toBe('Guest debe')
+  })
+
+  it('never shows two players with the same name at one table', () => {
+    const names = seatNameMap([
+      { playerId: 'p1', username: 'bot_aarav', seat: 1 },
+      { playerId: 'p2', username: 'bot_ace', seat: 2 },
+      { playerId: 'p3', username: 'bot_x5740', seat: 3 },
+      { playerId: 'me', username: 'g_debe7c55aaf0', seat: 0 },
+    ])
+    expect(names.get('p1')).toBe('Aarav')
+    expect(new Set(names.values()).size).toBe(4)
+    expect(names.get('me')).toBe('Guest debe')
   })
 })
 

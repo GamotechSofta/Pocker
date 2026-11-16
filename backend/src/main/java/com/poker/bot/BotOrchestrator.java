@@ -1,5 +1,6 @@
 package com.poker.bot;
 
+import com.poker.service.TableService;
 import com.poker.websocket.TableUpdatedEvent;
 import com.poker.websocket.WsEventType;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -18,21 +19,31 @@ import java.util.concurrent.ThreadLocalRandom;
 @Component
 public class BotOrchestrator {
 
-    /** Seat a bot shortly after a human joins. */
-    private static final long FILL_DELAY_MS = 500;
+    /** Bots take seats one by one, a little apart, so arrivals read like a filling lobby. */
+    private static final long FILL_DELAY_MIN_MS = 900;
+    private static final long FILL_DELAY_MAX_MS = 1_500;
     /** Thinking time between bot actions — keeps play readable. */
     private static final long ACT_DELAY_MIN_MS = 1_800;
     private static final long ACT_DELAY_MAX_MS = 3_200;
-    /** Hold the finished hand on screen so win/lose can be seen before next deal. */
-    private static final long RESULT_HOLD_MS = 4_500;
+    /** Matches the client's result-page countdown before the next deal. */
+    private static final long RESULT_HOLD_MS = 7_000;
+    /** Grace after the deadline so the client's own timeout does not race the server. */
+    private static final long TIMEOUT_GRACE_MS = 300;
 
     private final BotService botService;
+    private final TableService tableService;
     private final TaskScheduler taskScheduler;
     private final Map<UUID, ScheduledFuture<?>> pendingAct = new ConcurrentHashMap<>();
     private final Map<UUID, ScheduledFuture<?>> pendingFill = new ConcurrentHashMap<>();
+    private final Map<UUID, ScheduledFuture<?>> pendingTimeout = new ConcurrentHashMap<>();
 
-    public BotOrchestrator(BotService botService, @Qualifier("botTaskScheduler") TaskScheduler taskScheduler) {
+    public BotOrchestrator(
+            BotService botService,
+            TableService tableService,
+            @Qualifier("botTaskScheduler") TaskScheduler taskScheduler
+    ) {
         this.botService = botService;
+        this.tableService = tableService;
         this.taskScheduler = taskScheduler;
     }
 
@@ -40,19 +51,20 @@ public class BotOrchestrator {
     public void onTableUpdated(TableUpdatedEvent event) {
         UUID tableId = event.tableId();
         WsEventType type = event.type();
+        scheduleTurnTimeout(tableId);
         if (type == WsEventType.PLAYER_JOINED || type == WsEventType.PLAYER_LEFT) {
-            scheduleFill(tableId);
-            scheduleAct(tableId, FILL_DELAY_MS + 400);
+            long fillDelay = ThreadLocalRandom.current().nextLong(FILL_DELAY_MIN_MS, FILL_DELAY_MAX_MS + 1);
+            scheduleFill(tableId, fillDelay);
+            scheduleAct(tableId, fillDelay + 400);
             return;
         }
         if (type == WsEventType.HAND_COMPLETED || type == WsEventType.SHOWDOWN || type == WsEventType.POT_AWARDED) {
-            // Do not refill/start immediately — give the client time to show win/lose.
+            // Do not refill/start immediately — give the client time to show the result page.
             scheduleAct(tableId, RESULT_HOLD_MS);
             return;
         }
         if (type == WsEventType.HAND_STARTED) {
-            // The engine is already ready, but players must first see the complete
-            // clockwise deal. Start the first bot turn only after that animation.
+            // Players must first see the complete deal from the dealer's hands.
             scheduleAct(tableId, botService.dealAnimationDelayMs(tableId));
             return;
         }
@@ -60,7 +72,32 @@ public class BotOrchestrator {
         scheduleAct(tableId, randomActDelay());
     }
 
-    private void scheduleFill(UUID tableId) {
+    private void scheduleTurnTimeout(UUID tableId) {
+        cancel(pendingTimeout.remove(tableId));
+        Instant deadline;
+        try {
+            deadline = tableService.turnDeadline(tableId).orElse(null);
+        } catch (RuntimeException ex) {
+            return;
+        }
+        if (deadline == null) {
+            return;
+        }
+        ScheduledFuture<?> future = taskScheduler.schedule(
+                () -> {
+                    pendingTimeout.remove(tableId);
+                    try {
+                        tableService.enforceTurnTimeout(tableId);
+                    } catch (RuntimeException ignored) {
+                        // a later update reschedules the clock
+                    }
+                },
+                deadline.plusMillis(TIMEOUT_GRACE_MS)
+        );
+        pendingTimeout.put(tableId, future);
+    }
+
+    private void scheduleFill(UUID tableId, long delayMs) {
         cancel(pendingFill.remove(tableId));
         ScheduledFuture<?> future = taskScheduler.schedule(
                 () -> {
@@ -71,7 +108,7 @@ public class BotOrchestrator {
                         // next event retries
                     }
                 },
-                Instant.now().plusMillis(FILL_DELAY_MS)
+                Instant.now().plusMillis(delayMs)
         );
         pendingFill.put(tableId, future);
     }

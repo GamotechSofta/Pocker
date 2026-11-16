@@ -142,6 +142,16 @@ public class TexasHoldemEngine {
         }
     }
 
+    /** Credits chips for a wallet-funded (or house-funded bot) rebuy between hands. */
+    public void rebuy(String playerId, int chips, String detail) {
+        if (chips <= 0) {
+            throw new IllegalArgumentException("Rebuy chips must be positive");
+        }
+        PlayerState player = requirePlayer(playerId);
+        player.credit(chips);
+        state.addEvent("PLAYER_REBUY", detail != null ? detail : player.getUsername() + " rebought");
+    }
+
     private void removeSeat(PlayerState player) {
         state.removeSeat(player.getSeat());
         state.addEvent("PLAYER_LEFT", player.getUsername() + " left the table");
@@ -159,12 +169,7 @@ public class TexasHoldemEngine {
 
     public void startHand(Deck preparedDeck) {
         this.deck = Objects.requireNonNull(preparedDeck, "deck is required");
-        for (PlayerState player : state.getPlayers()) {
-            if (player.getChipStack() <= 0) {
-                player.credit(config.startingChips());
-                state.addEvent("PLAYER_REBUY", player.getUsername() + " received a play-money rebuy");
-            }
-        }
+        // Rebuys are funded by TableService from the player wallet (bots are house-funded).
         List<PlayerState> eligible = playersWithChips();
         if (eligible.size() < 2) {
             throw GameActionException.invalid("Need at least two players with chips to start a hand.");

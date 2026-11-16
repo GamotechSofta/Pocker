@@ -59,6 +59,32 @@ const GENERATED_BOT_NAMES = [
   'Tara', 'Neha', 'Kavya', 'Rohan', 'Priya',
 ]
 
+/**
+ * Display names for everyone at one table. Bots whose friendly name is already taken
+ * get the next free name, so a table never shows two "Aarav"s.
+ */
+export function seatNameMap(players: Array<{ playerId: string; username: string; seat: number }>): Map<string, string> {
+  const names = new Map<string, string>()
+  const taken = new Set<string>()
+  const ordered = [...players].sort((a, b) => Number(isBotUsername(a.username)) - Number(isBotUsername(b.username)) || a.seat - b.seat)
+  for (const player of ordered) {
+    let name = displaySeatName(player.username)
+    if (isBotUsername(player.username) && taken.has(name)) {
+      const start = GENERATED_BOT_NAMES.indexOf(name)
+      for (let step = 1; step <= GENERATED_BOT_NAMES.length; step += 1) {
+        const candidate = GENERATED_BOT_NAMES[(Math.max(0, start) + step) % GENERATED_BOT_NAMES.length]!
+        if (!taken.has(candidate)) {
+          name = candidate
+          break
+        }
+      }
+    }
+    taken.add(name)
+    names.set(player.playerId, name)
+  }
+  return names
+}
+
 export function displaySeatName(username: string): string {
   if (isBotUsername(username)) {
     const key = username.slice(4).toLowerCase().trim()

@@ -29,7 +29,7 @@ class TurnManagerTest {
     }
 
     @Test
-    void fullBotTableFollowsTheVisualLeftToRightSeatRing() {
+    void fullBotTableTurnsGoClockwiseLikeEveryOtherTable() {
         GameState state = new GameState(TableConfig.developmentDefaults());
         state.putPlayer(new PlayerState("guest", "Guest", 0, 1000));
         state.putPlayer(new PlayerState("aarav", "bot_aarav", 1, 1000));
@@ -38,12 +38,9 @@ class TurnManagerTest {
         state.putPlayer(new PlayerState("kabir", "bot_kabir", 4, 1000));
         state.putPlayer(new PlayerState("ishaan", "bot_ishaan", 5, 1000));
 
-        assertEquals(1, turns.nextOccupiedSeat(state, 2));
-        assertEquals(0, turns.nextOccupiedSeat(state, 1));
-        assertEquals(3, turns.nextOccupiedSeat(state, 0));
-        assertEquals(5, turns.nextOccupiedSeat(state, 3));
-        assertEquals(4, turns.nextOccupiedSeat(state, 5));
-        assertEquals(2, turns.nextOccupiedSeat(state, 4));
+        for (int seat = 0; seat < 6; seat++) {
+            assertEquals((seat + 1) % 6, turns.nextOccupiedSeat(state, seat));
+        }
     }
 
     @Test

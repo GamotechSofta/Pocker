@@ -7,6 +7,8 @@ public final class ErrorCodes {
     public static final String INVALID_GAME_ACTION = "INVALID_GAME_ACTION";
     public static final String NOT_PLAYER_TURN = "NOT_PLAYER_TURN";
     public static final String INSUFFICIENT_CHIPS = "INSUFFICIENT_CHIPS";
+    public static final String INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE";
+    public static final String WALLET_UNAVAILABLE = "WALLET_UNAVAILABLE";
     public static final String INVALID_RAISE = "INVALID_RAISE";
     public static final String GAME_ALREADY_STARTED = "GAME_ALREADY_STARTED";
     public static final String SEAT_UNAVAILABLE = "SEAT_UNAVAILABLE";

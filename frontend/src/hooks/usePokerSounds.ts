@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { soundEngine } from '@/audio/soundEngine'
 import allInSound from '@/assets/all in.wav'
 import betSound from '@/assets/Bet.wav'
 import callSound from '@/assets/call.wav'
-import cardDealSound from '@/assets/card_deal_single.wav'
-import cardShuffleSound from '@/assets/card_shuffle.wav'
 import checkSound from '@/assets/check.wav'
-import deckCutSound from '@/assets/deck_cut.wav'
 import foldSound from '@/assets/Fold.wav'
 import potSplitSound from '@/assets/potsplit.wav'
 import raiseSound from '@/assets/Raise.wav'
-import loseSound from '@/assets/youlose.wav'
-import winSound from '@/assets/youwin.wav'
 import type { GameEvent } from '@/types/game'
 
 export type PokerSound =
@@ -34,19 +30,15 @@ export type PokerSound =
   | 'win'
 
 const SOUND_STORAGE_KEY = 'poker-sound-enabled'
+/** Poker-only actions have no Rummy equivalent, so they keep the custom WAV pack. */
 const SOUND_ASSETS: Partial<Record<PokerSound, string>> = {
   'all-in': allInSound,
   bet: betSound,
   call: callSound,
-  cards: cardDealSound,
   check: checkSound,
-  'deck-cut': deckCutSound,
   fold: foldSound,
-  lose: loseSound,
   'pot-split': potSplitSound,
   raise: raiseSound,
-  shuffle: cardShuffleSound,
-  win: winSound,
 }
 
 type ResultSound = {
@@ -72,8 +64,20 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
     if (typeof window === 'undefined' || !('AudioContext' in window) || !isMountedRef.current) {
       return null
     }
+    const shared = soundEngine.getAudioContext()
+    if (shared) {
+      contextRef.current = shared
+      return shared
+    }
     contextRef.current ??= new AudioContext()
     return contextRef.current
+  }, [])
+
+  const safeResumeContext = useCallback((context: AudioContext): Promise<void> => {
+    if (context.state === 'suspended') {
+      return context.resume().catch(() => {})
+    }
+    return Promise.resolve()
   }, [])
 
   const stopAllSounds = useCallback(() => {
@@ -92,17 +96,43 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
       window.clearTimeout(timer)
     })
     activeTimersRef.current.clear()
-
-    if (contextRef.current && contextRef.current.state !== 'closed') {
-      void contextRef.current.close().catch(() => {})
-      contextRef.current = null
-    }
   }, [])
 
   const play = useCallback((sound: PokerSound) => {
-    if (!enabled || !unlockedRef.current || !isMountedRef.current) {
+    if (!enabled || soundEngine.isMuted() || !isMountedRef.current) {
       return
     }
+
+    soundEngine.unlock()
+
+    // Shared table moments use the Royal (Rummy) sound set; poker-only actions use the WAV pack below.
+    switch (sound) {
+      case 'cards':
+        soundEngine.playCardDeal()
+        return
+      case 'shuffle':
+        soundEngine.playCardFan()
+        return
+      case 'win':
+        soundEngine.play('win')
+        return
+      case 'lose':
+        soundEngine.play('lose')
+        return
+      case 'join':
+        soundEngine.play('join')
+        return
+      case 'showdown':
+        soundEngine.play('declare')
+        return
+      case 'tap':
+      case 'chips':
+        soundEngine.play('click')
+        return
+      default:
+        break
+    }
+
     const asset = SOUND_ASSETS[sound]
     if (asset) {
       const audio = new Audio(asset)
@@ -131,11 +161,9 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
     if (!context) {
       return
     }
-    if (context.state === 'suspended') {
-      void context.resume()
-    }
+    void safeResumeContext(context)
     playPokerSound(context, sound)
-  }, [enabled, getContext])
+  }, [enabled, getContext, safeResumeContext])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -145,19 +173,17 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
         return
       }
       unlockedRef.current = true
-      if (context.state === 'suspended') {
-        void context.resume()
-      }
+      void safeResumeContext(context)
     }
-    window.addEventListener('pointerdown', unlock, { once: true })
-    window.addEventListener('keydown', unlock, { once: true })
+    window.addEventListener('pointerdown', unlock, { once: true, passive: true })
+    window.addEventListener('keydown', unlock, { once: true, passive: true })
     return () => {
       isMountedRef.current = false
       window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('keydown', unlock)
       stopAllSounds()
     }
-  }, [getContext, stopAllSounds])
+  }, [getContext, safeResumeContext, stopAllSounds])
 
   useEffect(() => {
     if (previousEventCountRef.current === null) {
@@ -230,19 +256,20 @@ export function usePokerSounds(events: GameEvent[], viewerUsername?: string, res
     setEnabled((current) => {
       const next = !current
       window.localStorage.setItem(SOUND_STORAGE_KEY, String(next))
+      soundEngine.setMuted(!next)
       if (!next) {
         stopAllSounds()
       } else {
         const context = getContext()
         if (context) {
           unlockedRef.current = true
-          void context.resume()
+          void safeResumeContext(context)
           playPokerSound(context, 'tap')
         }
       }
       return next
     })
-  }, [getContext, stopAllSounds])
+  }, [getContext, safeResumeContext, stopAllSounds])
 
   return { soundEnabled: enabled, toggleSound: toggle, playSound: play, stopAllSounds }
 }

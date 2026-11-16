@@ -1,5 +1,6 @@
 package com.poker.dto;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -26,6 +27,7 @@ public record TableStateResponse(
         List<PayoutResponse> payouts,
         List<ShowdownPlayerResponse> showdown,
         LegalActionsResponse legalActions,
-        UUID viewerPlayerId
+        UUID viewerPlayerId,
+        Instant turnDeadline
 ) {
 }

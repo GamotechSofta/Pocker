@@ -53,6 +53,12 @@ class BotFillIntegrationTest extends AbstractMongoTest {
         tableService.joinTable(tableId, human.getId(), new JoinTableRequest(null));
 
         botService.fillAndMaybeStart(tableId);
+        assertEquals(2, tableService.engineSnapshot(tableId).state().getPlayers().size(), "bots arrive one at a time");
+
+        // Four more arrivals fill the table; the call after that deals the first hand.
+        for (int arrival = 0; arrival < 5; arrival++) {
+            botService.fillAndMaybeStart(tableId);
+        }
 
         TexasHoldemEngine engine = tableService.engineSnapshot(tableId);
         assertEquals(6, engine.state().getPlayers().size());
@@ -71,16 +77,19 @@ class BotFillIntegrationTest extends AbstractMongoTest {
             tableService.applyAction(tableId, human.getId(), new GameActionRequest("CALL", null, null, "it-call"));
         }
 
+        var botToAct = engine.state().currentPlayer();
+        assertTrue(botToAct != null && BotIdentity.isBotUsername(botToAct.getUsername()), "a bot should be on the clock");
+        int eventsBefore = engine.state().getEvents().size();
+
         botService.maybeAct(tableId);
         engine = tableService.engineSnapshot(tableId);
-        // The current bot should have acted: call/check/raise or advance the street.
+        // Whatever it chose (fold, call or raise), the bot must have taken its turn.
+        var events = engine.state().getEvents();
         assertTrue(
-                engine.state().getPot() > 15
-                        || engine.state().getStatus() != GameStatus.PRE_FLOP
-                        || engine.state().getCommunityCards().size() > 0
-                        || (engine.state().currentPlayer() != null
-                        && humanId.equals(engine.state().currentPlayer().getPlayerId())),
-                "expected bot to complete BB option or advance street"
+                events.subList(eventsBefore, events.size()).stream()
+                        .anyMatch(event -> "PLAYER_ACTION".equals(event.type())
+                                && event.detail().startsWith(botToAct.getUsername() + " ")),
+                "expected the bot on the clock to act"
         );
     }
 }

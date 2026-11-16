@@ -1,78 +1,81 @@
-# Poker Game
+# Royal Poker Platform
 
-Play-money online poker. Texas Hold'em first, then Omaha, Pineapple, 5-Card Draw, and Razz.
+Enterprise-grade online poker platform supporting Texas Hold'em, Omaha, Pineapple, 5-Card Draw, and Razz.  
+Built on the same architecture and aesthetic as the Royal Rummy platform, with full audio effects, dedicated Dark Titanium Admin Panel, and real-time live spectator.
 
-This repository is in **Phase 20**: all five variants are playable. The UI has **no login screen** — it auto-creates a guest session (`POST /api/auth/guest`) for embed / other-platform integration.
+---
 
-## Stack
+## 🏗️ Technology Stack
 
-- Frontend: React, Vite, TypeScript, Tailwind CSS, Zustand, React Router
-- Backend: Spring Boot 4, Java 21, Maven
-- Database: MongoDB 7 (Docker)
+- **Player Client (`frontend`):** React 18, Vite, TypeScript, Tailwind CSS, Zustand, Casino Audio Engine (Port `5173`)
+- **Game Backend (`backend`):** Spring Boot 4, Java 21, WebSocket, Maven (Port `8080`)
+- **Admin Backend (`admin-backend`):** Node.js, Express.js, TypeScript, Mongoose (Port `5050`)
+- **Admin Portal (`admin-frontend`):** React 18, Vite, TypeScript, Lucide, Bespoke Dark Titanium Command Center (Port `5180`)
+- **Database:** MongoDB 7 (Port `27017`)
 
-Virtual chips only. No real-money betting.
+---
 
-## Local development
+## 🚀 How to Run Locally
 
-Copy environment values, then start MongoDB, the API, and the UI.
-
+### 1. Database (MongoDB)
 ```bash
-copy .env.example .env
 docker compose up -d mongo
 ```
 
-### Backend
-
+### 2. Game Backend (Java / Spring Boot)
 ```bash
 cd backend
 mvnw.cmd clean test
 mvnw.cmd spring-boot:run
 ```
+- API Status: http://localhost:8080/api/status
+- Health: http://localhost:8080/actuator/health
+- Swagger: http://localhost:8080/swagger-ui.html
 
-API status: http://localhost:8080/api/status  
-Health: http://localhost:8080/actuator/health  
-Swagger: http://localhost:8080/swagger-ui.html
-
-### Frontend
-
+### 3. Player Frontend (React)
 ```bash
 cd frontend
 npm install
-npm test
 npm run dev
 ```
+- Web UI: http://localhost:5173
 
-UI: http://localhost:5173 (or the next free port if 5173 is taken)
-
-The Vite dev server proxies `/api` and `/ws` to Spring Boot. Sign in at `/login` or `/register`. `/lobby` lists tables, create/join/leave, and you can pick Texas Hold'em, Omaha, Pineapple, 5-Card Draw, or Razz. `/game/:gameId` is the live table, including showdown results from the server. A dropped socket reconnects automatically; disconnect does not fold. Omaha showdown uses exactly 2 hole cards and 3 community cards.
-
-### Docker (all services)
-
+### 4. Admin Backend (Express.js)
 ```bash
-docker compose up -d
-docker compose down
+cd admin-backend
+npm install
+npm run dev
 ```
+- Admin API: http://localhost:5050
 
-## Layout
+### 5. Admin Portal Frontend (React)
+```bash
+cd admin-frontend
+npm install
+npm run dev
+```
+- Admin Command Center: http://localhost:5180
 
-- `frontend/` — React application
-- `backend/` — Spring Boot application and Texas Hold'em engine
-- `docs/` — architecture, API, rules, and development notes
-- `docker-compose.yml` — MongoDB, backend, and frontend
+---
 
-## Current endpoints
+## 📁 Repository Structure
 
-- `GET /api/status` — process is running
-- `GET /actuator/health` — process and MongoDB
-- `POST /api/auth/register` / `POST /api/auth/login` — JWT
-- `GET /api/auth/me` — current user (Bearer token)
-- `GET /api/tables` / `POST /api/tables` — list and create (JWT)
-- `GET /api/tables/{id}` — table detail
-- `POST /api/tables/{id}/join` / `leave` / `start`
-- `GET /api/tables/{id}/state` — sanitized game state for the current user
-- `ws://localhost:8080/ws` — STOMP; CONNECT with Bearer JWT; subscribe `/user/queue/game/{tableId}`
-- Swagger UI — http://localhost:8080/swagger-ui.html
-
-Dev users (profile `dev`): `player1`–`player6`, password `password`.
-
-All five variants from the build spec are playable (Hold'em, Omaha, Pineapple, 5-Card Draw, Razz). Phase 20 audit notes and deployment checklist live in `docs/development.md` and the production-readiness canvas.
+```text
+E:\Pocker/
+├── admin-backend/                 # Standalone Express.js Admin API (Port 5050)
+│   ├── src/
+│   │   ├── controllers/          # Overview, Poker Variants, Tables, Replay, Config
+│   │   ├── models/               # Game, GameResult, GameEvent, WalletTransaction, PokerTable
+│   │   └── routes/               # Admin endpoints & RBAC
+├── admin-frontend/                # Standalone React Admin Portal (Port 5180)
+│   ├── src/
+│   │   ├── pages/variants/       # Holdem, Omaha, Pineapple, Draw & Razz Dashboards
+│   │   ├── pages/HandReplayPage  # Street-by-street poker dispute replay
+│   │   └── pages/RulesConfigPage # Live rake % and blind configurations
+├── backend/                       # Java 21 Spring Boot Game Engine (Port 8080)
+│   └── src/main/java/com/poker/  # Variants, TableService, Bots, WebSocket
+└── frontend/                      # React Player Client with Casino Board & Audio (Port 5173)
+    ├── public/sounds/             # Card deals, card slides, fan, coin clicks, fanfare win
+    ├── public/avatars/            # 30 high-res Boy & Girl avatars
+    └── src/audio/soundEngine.ts   # Hybrid Web Audio + sample engine
+```

@@ -20,6 +20,7 @@ import com.poker.game.engine.ShowdownResult;
 import com.poker.game.engine.TexasHoldemEngine;
 import com.poker.game.model.Card;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -65,6 +66,15 @@ public final class TableMapper {
     }
 
     public static TableStateResponse toSanitizedState(PokerTable table, TexasHoldemEngine engine, UUID viewerId) {
+        return toSanitizedState(table, engine, viewerId, null);
+    }
+
+    public static TableStateResponse toSanitizedState(
+            PokerTable table,
+            TexasHoldemEngine engine,
+            UUID viewerId,
+            Instant turnDeadline
+    ) {
         GameState state = engine.state();
         String viewerKey = viewerId.toString();
         boolean revealShowdown = !state.getShowdown().isEmpty();
@@ -115,7 +125,8 @@ public final class TableMapper {
                         legal.minBetOrRaiseTo(),
                         legal.maxBetOrRaiseTo()
                 ),
-                viewerId
+                viewerId,
+                turnDeadline
         );
     }
 
