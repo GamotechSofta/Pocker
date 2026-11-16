@@ -8,7 +8,7 @@ spring:
     uri: ${MONGODB_URI:${SPRING_DATA_MONGODB_URI:mongodb://localhost:27017/poker}}
     representation:
       uuid: standard
-    data:
+  data:
     mongodb:
       auto-index-creation: true
 
