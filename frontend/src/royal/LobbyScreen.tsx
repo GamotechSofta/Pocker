@@ -16,6 +16,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react'
+import { ensureGuestSession } from '@/api/auth'
 import { ApiRequestError } from '@/api/errors'
 import { cancelMatchmaking, getMatchmakingTicket, joinMatchmaking } from '@/api/matchmaking'
 import { createTable, joinTable, joinTableByCode } from '@/api/tables'
@@ -37,6 +38,7 @@ import {
   type PokerVariantArt,
 } from '@/royal/pokerVariants'
 import { useProfileStore, type TableConfig } from '@/royal/profileStore'
+import { useAuthStore } from '@/store/authStore'
 import { apiErrorMessage } from '@/utils/apiError'
 import { PLAYER_CHARACTERS, photoForCharacter } from '@/utils/avatarUtils'
 import { formatChipCount } from '@/utils/cards'
@@ -247,6 +249,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
       setLastConfig(config)
       stopPolling()
       try {
+        await ensureGuestSession()
         const ticket = await joinMatchmaking({ ...config, allowBotFallback: true })
         ticketRef.current = ticket.ticketId
         if (ticket.status === 'MATCHED' && ticket.matchedTableId) {
@@ -339,6 +342,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
     setLastConfig(config)
     const host = (displayName || 'Player').trim().slice(0, 16) || 'Player'
     try {
+      await ensureGuestSession()
       const table = await createTable({
         name: `${host}'s ${activeTitle} Room`,
         variant: config.variant,
@@ -377,7 +381,20 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
     void tryLockLandscape()
     soundEngine.unlock()
     try {
-      const table = await joinTableByCode({ code })
+      await ensureGuestSession()
+      let table
+      try {
+        table = await joinTableByCode({ code })
+      } catch (cause: unknown) {
+        // Stale/missing token on 2nd laptop — mint a fresh guest and retry once.
+        if (cause instanceof ApiRequestError && cause.status === 401) {
+          useAuthStore.getState().logout()
+          await ensureGuestSession()
+          table = await joinTableByCode({ code })
+        } else {
+          throw cause
+        }
+      }
       void refreshWallet()
       setJoinOpen(false)
       setJoinCode('')

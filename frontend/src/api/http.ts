@@ -3,7 +3,11 @@ import { useAuthStore } from '@/store/authStore'
 import { apiUrl } from '@/utils/env'
 import { getAccessToken } from '@/utils/token'
 
-const AUTH_PATHS_WITHOUT_SESSION = new Set(['/api/auth/login', '/api/auth/register'])
+const AUTH_PATHS_WITHOUT_SESSION = new Set([
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/guest',
+])
 
 export async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)

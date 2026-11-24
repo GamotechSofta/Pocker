@@ -9,7 +9,9 @@ const rootDir = fileURLToPath(new URL('.', import.meta.url))
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: true,
     port: 5173,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8080',

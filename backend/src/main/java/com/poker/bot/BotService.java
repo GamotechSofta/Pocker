@@ -67,8 +67,10 @@ public class BotService {
         if (table == null) {
             return;
         }
-        // Private invite-code rooms are human-only; the host starts when ready.
+        // Private invite-code rooms never fill with bots, but still need the next
+        // hand to deal after RESULT_HOLD once two humans remain seated.
         if (table.isPrivateRoom()) {
+            maybeAutoStart(tableId);
             return;
         }
 
