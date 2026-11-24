@@ -42,7 +42,9 @@ public final class TableMapper {
                 table.getBigBlind(),
                 table.getMaxPlayers(),
                 table.getPlayers().size(),
-                table.getStatus().name()
+                table.getStatus().name(),
+                table.isPrivateRoom(),
+                table.getRoomCode()
         );
     }
 
@@ -61,7 +63,9 @@ public final class TableMapper {
                 table.getStatus().name(),
                 table.getCreatedById(),
                 table.getCreatedAt(),
-                players
+                players,
+                table.getRoomCode(),
+                table.isPrivateRoom()
         );
     }
 

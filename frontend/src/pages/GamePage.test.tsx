@@ -22,6 +22,7 @@ vi.mock('@/api/tables', () => ({
   createTable: vi.fn(),
   getTable: vi.fn(),
   joinTable: vi.fn(),
+  joinTableByCode: vi.fn(),
   leaveTable: vi.fn(),
   startTable: vi.fn(),
   getTableState: vi.fn(),

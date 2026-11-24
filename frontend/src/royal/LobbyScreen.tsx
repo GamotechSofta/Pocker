@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   Coins,
+  DoorOpen,
+  KeyRound,
   Layers,
   Minus,
   Pencil,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react'
 import { ApiRequestError } from '@/api/errors'
 import { cancelMatchmaking, getMatchmakingTicket, joinMatchmaking } from '@/api/matchmaking'
+import { createTable, joinTable, joinTableByCode } from '@/api/tables'
 import { fetchWalletBalance } from '@/api/wallet'
 import { soundEngine } from '@/audio/soundEngine'
 import { LandscapeGate, useLandscapeGate } from '@/components/table/LandscapeGate'
@@ -169,9 +172,15 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [walletOpen, setWalletOpen] = useState(false)
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false)
+  const [joinOpen, setJoinOpen] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false)
   const ticketRef = useRef<string | null>(null)
   const pollRef = useRef<number | null>(null)
   const enqueuingRef = useRef(false)
+  const creatingRef = useRef(false)
+  const joiningRef = useRef(false)
 
   const tier = BLIND_TIERS[tierIndex] ?? BLIND_TIERS[1]
   const buyIn = buyInFor(tierIndex)
@@ -306,6 +315,84 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
       maxPlayers: selectedPlayers,
       startingChips: buyIn,
     })
+  }
+
+  const handleCreateRoom = async () => {
+    if (creatingRef.current || isMatchmaking || isJoiningRoom) return
+    if (walletBalance != null && walletBalance < buyIn) {
+      setErrorMsg(`Insufficient balance. Need ₹${buyIn.toLocaleString('en-IN')} to buy in.`)
+      setWalletOpen(true)
+      return
+    }
+    creatingRef.current = true
+    setIsCreatingRoom(true)
+    setErrorMsg(null)
+    void tryLockLandscape()
+    soundEngine.unlock()
+    const config = {
+      variant: selectedVariant,
+      smallBlind: tier.smallBlind,
+      bigBlind: tier.bigBlind,
+      maxPlayers: selectedPlayers,
+      startingChips: buyIn,
+    }
+    setLastConfig(config)
+    const host = (displayName || 'Player').trim().slice(0, 16) || 'Player'
+    try {
+      const table = await createTable({
+        name: `${host}'s ${activeTitle} Room`,
+        variant: config.variant,
+        smallBlind: config.smallBlind,
+        bigBlind: config.bigBlind,
+        maxPlayers: config.maxPlayers,
+        startingChips: config.startingChips,
+        privateRoom: true,
+      })
+      await joinTable(table.id)
+      void refreshWallet()
+      soundEngine.play('deal')
+      enterTable(table.id)
+    } catch (cause: unknown) {
+      setErrorMsg(apiErrorMessage(cause))
+      if (cause instanceof ApiRequestError && cause.code === 'INSUFFICIENT_BALANCE') {
+        setWalletOpen(true)
+        void refreshWallet()
+      }
+    } finally {
+      creatingRef.current = false
+      setIsCreatingRoom(false)
+    }
+  }
+
+  const handleJoinRoom = async () => {
+    if (joiningRef.current || isMatchmaking || isCreatingRoom) return
+    const code = joinCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+    if (code.length < 4) {
+      setErrorMsg('Enter a valid room code.')
+      return
+    }
+    joiningRef.current = true
+    setIsJoiningRoom(true)
+    setErrorMsg(null)
+    void tryLockLandscape()
+    soundEngine.unlock()
+    try {
+      const table = await joinTableByCode({ code })
+      void refreshWallet()
+      setJoinOpen(false)
+      setJoinCode('')
+      soundEngine.play('deal')
+      enterTable(table.id)
+    } catch (cause: unknown) {
+      setErrorMsg(apiErrorMessage(cause))
+      if (cause instanceof ApiRequestError && cause.code === 'INSUFFICIENT_BALANCE') {
+        setWalletOpen(true)
+        void refreshWallet()
+      }
+    } finally {
+      joiningRef.current = false
+      setIsJoiningRoom(false)
+    }
   }
 
   const handleCancel = async () => {
@@ -572,28 +659,127 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
 
                 {errorMsg && <div className="stake-error" role="alert">{errorMsg}</div>}
 
-                <button
-                  type="button"
-                  className="stake-play-btn"
-                  onClick={() => {
-                    soundEngine.unlock()
-                    soundEngine.playOldClick()
-                    handlePlay()
-                  }}
-                  disabled={isMatchmaking}
-                >
-                  <Play size={18} fill="#2a1a06" />
-                  PLAY NOW
-                </button>
+                <div className="stake-cta-row">
+                  <button
+                    type="button"
+                    className="stake-play-btn"
+                    onClick={() => {
+                      soundEngine.unlock()
+                      soundEngine.playOldClick()
+                      handlePlay()
+                    }}
+                    disabled={isMatchmaking || isCreatingRoom || isJoiningRoom}
+                  >
+                    <Play size={18} fill="#2a1a06" />
+                    {isMatchmaking ? 'FINDING…' : 'PLAY NOW'}
+                  </button>
+
+                  <div className="stake-room-row">
+                    <button
+                      type="button"
+                      className="stake-create-btn"
+                      onClick={() => {
+                        soundEngine.unlock()
+                        soundEngine.play('click')
+                        void handleCreateRoom()
+                      }}
+                      disabled={isMatchmaking || isCreatingRoom || isJoiningRoom}
+                    >
+                      <DoorOpen size={18} />
+                      {isCreatingRoom ? 'CREATING…' : 'CREATE ROOM'}
+                    </button>
+                    <button
+                      type="button"
+                      className="stake-join-btn"
+                      onClick={() => {
+                        soundEngine.unlock()
+                        soundEngine.play('click')
+                        setErrorMsg(null)
+                        setJoinOpen(true)
+                      }}
+                      disabled={isMatchmaking || isCreatingRoom || isJoiningRoom}
+                    >
+                      <KeyRound size={18} />
+                      JOIN ROOM
+                    </button>
+                  </div>
+                </div>
 
                 <div className="stake-summary">
                   Blinds {formatChipCount(tier.smallBlind)}/{formatChipCount(tier.bigBlind)} · {selectedPlayers} Players Table ·
                   Buy-in 🪙{formatChipCount(buyIn)}
+                  <br />
+                  <span className="stake-summary-hint">
+                    Select 2 or 6 players · Create Room code · friends join · min 2 to start
+                    {selectedPlayers === 2 ? ' · 2P starts when both sit' : ' · 6P fills then auto-starts'}
+                  </span>
                 </div>
               </div>
             </div>
           )}
         </main>
+
+        {joinOpen && (
+          <div className="mm-overlay" role="dialog" aria-label="Join room">
+            <div className="stake-card mm-card join-room-card">
+              <span className="stake-suit stake-suit-tl">♠</span>
+              <span className="stake-suit stake-suit-tr">♦</span>
+              <span className="stake-suit stake-suit-bl">♣</span>
+              <span className="stake-suit stake-suit-br">♥</span>
+              <button
+                type="button"
+                className="join-room-close"
+                aria-label="Close"
+                onClick={() => {
+                  soundEngine.play('click')
+                  setJoinOpen(false)
+                  setErrorMsg(null)
+                }}
+              >
+                <X size={18} />
+              </button>
+              <div className="stake-ribbon mm-ribbon">
+                <h2>JOIN ROOM</h2>
+                <p>ENTER THE HOST&apos;S CODE</p>
+              </div>
+              <label className="join-room-label" htmlFor="join-room-code">
+                Room code
+              </label>
+              <input
+                id="join-room-code"
+                className="join-room-input"
+                value={joinCode}
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={12}
+                placeholder="ABC123"
+                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void handleJoinRoom()
+                }}
+              />
+              {errorMsg && (
+                <div className="stake-error" role="alert" style={{ marginTop: 10 }}>
+                  {errorMsg}
+                </div>
+              )}
+              <button
+                type="button"
+                className="stake-play-btn"
+                style={{ marginTop: 16, maxWidth: '100%' }}
+                disabled={isJoiningRoom || joinCode.trim().length < 4}
+                onClick={() => {
+                  soundEngine.play('click')
+                  void handleJoinRoom()
+                }}
+              >
+                <KeyRound size={18} />
+                {isJoiningRoom ? 'JOINING…' : 'JOIN TABLE'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {isMatchmaking && (
           <div className="mm-overlay" role="dialog" aria-label="Finding table">

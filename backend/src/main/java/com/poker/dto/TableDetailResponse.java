@@ -15,6 +15,8 @@ public record TableDetailResponse(
         String status,
         UUID createdBy,
         Instant createdAt,
-        List<SeatedPlayerResponse> players
+        List<SeatedPlayerResponse> players,
+        String roomCode,
+        boolean privateRoom
 ) {
 }

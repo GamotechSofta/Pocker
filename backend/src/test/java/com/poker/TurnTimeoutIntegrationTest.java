@@ -37,7 +37,7 @@ class TurnTimeoutIntegrationTest extends AbstractMongoTest {
         User first = human();
         User second = human();
         UUID tableId = tableService.createTable(first.getId(), new CreateTableRequest(
-                "Clock IT", "TEXAS_HOLDEM", 5, 10, 2, 1000
+                "Clock IT", "TEXAS_HOLDEM", 5, 10, 2, 1000, false
         )).id();
         tableService.joinTable(tableId, first.getId(), new JoinTableRequest(null));
         tableService.joinTable(tableId, second.getId(), new JoinTableRequest(null));

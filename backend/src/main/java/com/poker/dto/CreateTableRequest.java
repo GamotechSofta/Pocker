@@ -24,6 +24,9 @@ public record CreateTableRequest(
         Integer maxPlayers,
 
         @Min(1)
-        Integer startingChips
+        Integer startingChips,
+
+        /** When true, generates a shareable room code and disables bot fill. */
+        Boolean privateRoom
 ) {
 }

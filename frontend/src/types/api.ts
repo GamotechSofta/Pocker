@@ -46,6 +46,8 @@ export type TableSummary = {
   maxPlayers: number
   playerCount: number
   status: string
+  privateRoom?: boolean
+  roomCode?: string | null
 }
 
 export type SeatedPlayer = {
@@ -67,6 +69,8 @@ export type TableDetail = {
   createdBy: string
   createdAt: string
   players: SeatedPlayer[]
+  roomCode?: string | null
+  privateRoom?: boolean
 }
 
 export type CreateTableRequest = {
@@ -76,6 +80,11 @@ export type CreateTableRequest = {
   bigBlind?: number
   maxPlayers?: number
   startingChips?: number
+  privateRoom?: boolean
+}
+
+export type JoinByCodeRequest = {
+  code: string
 }
 
 export type JoinTableRequest = {

@@ -58,7 +58,9 @@ class MatchmakingServiceTest {
                 "WAITING",
                 playerId,
                 Instant.now(),
-                List.of()
+                List.of(),
+                null,
+                false
         ));
         MatchmakingService service = new MatchmakingService(tables, escrows, 0, 30_000);
 

@@ -1,5 +1,5 @@
 import { http } from '@/api/http'
-import type { CreateTableRequest, JoinTableRequest, TableDetail, TableSummary } from '@/types/api'
+import type { CreateTableRequest, JoinByCodeRequest, JoinTableRequest, TableDetail, TableSummary } from '@/types/api'
 import type { TableState } from '@/types/game'
 
 export function listTables(): Promise<TableSummary[]> {
@@ -19,6 +19,13 @@ export function getTable(tableId: string): Promise<TableDetail> {
 
 export function joinTable(tableId: string, request: JoinTableRequest = {}): Promise<TableDetail> {
   return http<TableDetail>(`/api/tables/${tableId}/join`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export function joinTableByCode(request: JoinByCodeRequest): Promise<TableDetail> {
+  return http<TableDetail>('/api/tables/join-by-code', {
     method: 'POST',
     body: JSON.stringify(request),
   })

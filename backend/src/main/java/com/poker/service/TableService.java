@@ -140,6 +140,8 @@ public class TableService {
             throw new InvalidGameActionException(ex.getMessage());
         }
 
+        boolean privateRoom = Boolean.TRUE.equals(request.privateRoom());
+        String roomCode = privateRoom ? allocateRoomCode() : null;
         PokerTable table = tableRepository.save(new PokerTable(
                 request.name().trim(),
                 pokerVariant.getName(),
@@ -147,7 +149,9 @@ public class TableService {
                 config.bigBlind(),
                 config.maxPlayers(),
                 config.startingChips(),
-                creator
+                creator,
+                roomCode,
+                privateRoom
         ));
         engines.put(table.getId(), new TexasHoldemEngine(table.getId().toString(), config, pokerVariant));
         return TableMapper.toDetail(table);
@@ -155,6 +159,59 @@ public class TableService {
 
     public TableDetailResponse getTable(UUID tableId) {
         return TableMapper.toDetail(requireTable(tableId));
+    }
+
+    public TableDetailResponse joinByRoomCode(UUID userId, String rawCode) {
+        String code = normalizeRoomCode(rawCode);
+        PokerTable table = tableRepository.findByRoomCodeIgnoreCase(code)
+                .orElseThrow(() -> new InvalidGameActionException("No room found for code " + code + "."));
+        if (!table.isPrivateRoom()) {
+            throw new InvalidGameActionException("That table is not joinable by invite code.");
+        }
+        if (table.getStatus() != com.poker.entity.TableStatus.WAITING
+                && table.getStatus() != com.poker.entity.TableStatus.PLAYING) {
+            throw new InvalidGameActionException("This room is no longer accepting players.");
+        }
+        if (table.getPlayers().size() >= table.getMaxPlayers()
+                && findSeated(table, userId).isEmpty()) {
+            throw new InvalidGameActionException("This room is full.");
+        }
+        if (findSeated(table, userId).isPresent()) {
+            return TableMapper.toDetail(table);
+        }
+        return joinTable(table.getId(), userId, new JoinTableRequest(null, null));
+    }
+
+    private String allocateRoomCode() {
+        for (int attempt = 0; attempt < 24; attempt++) {
+            String code = randomRoomCode();
+            if (!tableRepository.existsByRoomCodeIgnoreCase(code)) {
+                return code;
+            }
+        }
+        throw new InvalidGameActionException("Could not allocate a room code. Try again.");
+    }
+
+    private static String randomRoomCode() {
+        // Avoid ambiguous 0/O/1/I characters for easy sharing.
+        final String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        StringBuilder sb = new StringBuilder(6);
+        java.util.concurrent.ThreadLocalRandom rng = java.util.concurrent.ThreadLocalRandom.current();
+        for (int i = 0; i < 6; i++) {
+            sb.append(alphabet.charAt(rng.nextInt(alphabet.length())));
+        }
+        return sb.toString();
+    }
+
+    private static String normalizeRoomCode(String raw) {
+        if (raw == null) {
+            throw new InvalidGameActionException("Room code is required.");
+        }
+        String code = raw.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
+        if (code.length() < 4 || code.length() > 12) {
+            throw new InvalidGameActionException("Enter a valid room code.");
+        }
+        return code;
     }
 
     public TableDetailResponse joinTable(UUID tableId, UUID userId, JoinTableRequest request) {
@@ -197,6 +254,26 @@ public class TableService {
             PokerTablePlayer seatedPlayer = new PokerTablePlayer(user, seated.getSeat(), seated.getChipStack(), escrowId);
             table.addPlayer(seatedPlayer);
             tableRepository.save(table);
+
+            // Private rooms: when the selected max seats are full, deal automatically.
+            // Host can still start earlier once the poker minimum (2) is seated.
+            if (table.isPrivateRoom()
+                    && table.getPlayers().size() >= table.getMaxPlayers()
+                    && engine.state().getHandNumber() == 0
+                    && (engine.state().getStatus() == GameStatus.WAITING
+                        || engine.state().getStatus() == GameStatus.NEXT_HAND)) {
+                removeDepartedEnginePlayers(table, engine);
+                fundRebuys(table, engine);
+                if (engine.state().getPlayers().size() >= 2) {
+                    engine.startHand();
+                    syncStatusAndStacks(table, engine);
+                    tableRepository.save(table);
+                    publish(tableId, WsEventType.PLAYER_JOINED);
+                    publish(tableId, WsEventType.HAND_STARTED);
+                    return TableMapper.toDetail(requireTable(tableId));
+                }
+            }
+
             TableDetailResponse detail = TableMapper.toDetail(requireTable(tableId));
             publish(tableId, WsEventType.PLAYER_JOINED);
             return detail;
@@ -231,6 +308,14 @@ public class TableService {
             TexasHoldemEngine engine = engineFor(table);
             removeDepartedEnginePlayers(table, engine);
             fundRebuys(table, engine);
+            if (table.isPrivateRoom()) {
+                if (!userId.equals(table.getCreatedById())) {
+                    throw new InvalidGameActionException("Only the host can start this room.");
+                }
+                if (engine.state().getPlayers().size() < 2) {
+                    throw new InvalidGameActionException("Need at least 2 players to start.");
+                }
+            }
             engine.startHand();
             syncStatusAndStacks(table, engine);
             tableRepository.save(table);

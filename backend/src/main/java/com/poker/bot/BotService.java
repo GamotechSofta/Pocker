@@ -67,6 +67,10 @@ public class BotService {
         if (table == null) {
             return;
         }
+        // Private invite-code rooms are human-only; the host starts when ready.
+        if (table.isPrivateRoom()) {
+            return;
+        }
 
         List<PokerTablePlayer> seated = new ArrayList<>(table.getPlayers());
         long humans = seated.stream().filter(player -> !isBot(player)).count();

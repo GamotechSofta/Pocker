@@ -10,6 +10,8 @@ public record TableSummaryResponse(
         int bigBlind,
         int maxPlayers,
         int playerCount,
-        String status
+        String status,
+        boolean privateRoom,
+        String roomCode
 ) {
 }

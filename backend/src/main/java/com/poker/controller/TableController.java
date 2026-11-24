@@ -1,6 +1,7 @@
 package com.poker.controller;
 
 import com.poker.dto.CreateTableRequest;
+import com.poker.dto.JoinByCodeRequest;
 import com.poker.dto.JoinTableRequest;
 import com.poker.dto.TableDetailResponse;
 import com.poker.dto.TableStateResponse;
@@ -56,6 +57,15 @@ public class TableController {
     @Operation(summary = "Get a table")
     public TableDetailResponse get(@PathVariable UUID id) {
         return tableService.getTable(id);
+    }
+
+    @PostMapping("/join-by-code")
+    @Operation(summary = "Join a private room by invite code")
+    public TableDetailResponse joinByCode(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody JoinByCodeRequest request
+    ) {
+        return tableService.joinByRoomCode(userId(jwt), request.code());
     }
 
     @PostMapping("/{id}/join")

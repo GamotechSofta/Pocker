@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AlertCircle, Menu, RotateCw, Wifi } from 'lucide-react'
-import { getTable, getTableState, leaveTable } from '@/api/tables'
+import { AlertCircle, Copy, Menu, Play, RotateCw, Wifi } from 'lucide-react'
+import { getTable, getTableState, leaveTable, startTable } from '@/api/tables'
 import { soundEngine } from '@/audio/soundEngine'
 import { connectionLabel } from '@/components/table/ConnectionBanner'
 import { LandscapeGate, useLandscapeGate } from '@/components/table/LandscapeGate'
@@ -117,6 +117,8 @@ export function GamePage() {
   const prevHandRef = useRef<number | null>(null)
   const dealPlayedRef = useRef<number | null>(null)
   const [startStacks, setStartStacks] = useState<{ hand: number; stacks: Record<string, number> } | null>(null)
+  const [startingHand, setStartingHand] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const seenPlayersRef = useRef<Set<string> | null>(null)
 
   const viewer = state?.players.find((player) => player.playerId === user?.id)
@@ -126,6 +128,11 @@ export function GamePage() {
   const idle = isHandIdle(state?.status ?? table?.status)
   const complete = hasHandResult(state)
   const waitingForPlayers = !state || (idle && !complete && state.handNumber === 0)
+  const privateRoom = Boolean(table?.privateRoom)
+  const roomCode = table?.roomCode?.trim() || null
+  const isHost = Boolean(user?.id && table?.createdBy === user.id)
+  const seatedCount = state?.players.length ?? table?.players.length ?? 0
+  const canHostStart = privateRoom && isHost && waitingForPlayers && seatedCount >= 2 && !startingHand
   const actor = state?.players.find((player) => player.isTurn)
   const seatNames = useMemo(() => seatNameMap(state?.players ?? []), [state?.players])
   const nameFor = (player: PlayerView) => seatNames.get(player.playerId) ?? displaySeatName(player.username)
@@ -335,6 +342,35 @@ export function GamePage() {
     }
   }
 
+  async function onStartPrivateRoom() {
+    if (!canHostStart) return
+    soundEngine.play('click')
+    setStartingHand(true)
+    setToast(null)
+    try {
+      const snapshot = await startTable(gameId)
+      setGameState(snapshot)
+      void load(true)
+    } catch (cause: unknown) {
+      setToast(apiErrorMessage(cause))
+      soundEngine.play('error')
+    } finally {
+      setStartingHand(false)
+    }
+  }
+
+  async function onCopyRoomCode() {
+    if (!roomCode) return
+    soundEngine.play('click')
+    try {
+      await navigator.clipboard.writeText(roomCode)
+      setCodeCopied(true)
+      window.setTimeout(() => setCodeCopied(false), 1600)
+    } catch {
+      setToast('Could not copy code')
+    }
+  }
+
   const variant = state?.variant ?? table?.variant ?? TABLE_DEFAULTS.variant
   const variantName = variantTitle(variant)
   const smallBlind = state?.smallBlind ?? table?.smallBlind ?? TABLE_DEFAULTS.smallBlind
@@ -524,15 +560,60 @@ export function GamePage() {
                 waiting={waitingForPlayers}
               />
               {waitingForPlayers && (
-                <div className="join-wait" role="status">
-                  <div className="join-wait-sec">
-                    {waitSeconds}
-                    <span>s</span>
-                  </div>
-                  <div className="join-wait-copy">
-                    <p className="join-wait-kicker">Players are joining</p>
-                    <p className="join-wait-line">Game starts when the table is full</p>
-                  </div>
+                <div className={`join-wait${privateRoom ? ' join-wait--private' : ''}`} role="status">
+                  {privateRoom && roomCode ? (
+                    <>
+                      <div className="join-wait-copy">
+                        <p className="join-wait-kicker">
+                          {maxPlayers === 2 ? '2 Players room' : `${maxPlayers} Players room`}
+                        </p>
+                        <p className="join-wait-line">
+                          {seatedCount}/{maxPlayers} seated · min 2 to start
+                          {seatedCount >= maxPlayers
+                            ? ' · table full'
+                            : isHost
+                              ? ' · share code below'
+                              : ' · waiting for host'}
+                        </p>
+                      </div>
+                      <div className="room-code-panel">
+                        <span className="room-code-label">Room code</span>
+                        <span className="room-code-value">{roomCode}</span>
+                        <button type="button" className="room-code-copy" onClick={() => void onCopyRoomCode()}>
+                          <Copy size={14} />
+                          {codeCopied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      {isHost && (
+                        <button
+                          type="button"
+                          className="room-start-btn"
+                          disabled={!canHostStart}
+                          onClick={() => void onStartPrivateRoom()}
+                        >
+                          <Play size={16} fill="currentColor" />
+                          {startingHand
+                            ? 'Starting…'
+                            : seatedCount < 2
+                              ? 'Need 1 more player…'
+                              : seatedCount >= maxPlayers
+                                ? 'Start game'
+                                : `Start with ${seatedCount}`}
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="join-wait-sec">
+                        {waitSeconds}
+                        <span>s</span>
+                      </div>
+                      <div className="join-wait-copy">
+                        <p className="join-wait-kicker">Players are joining</p>
+                        <p className="join-wait-line">Game starts when the table is full</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </section>

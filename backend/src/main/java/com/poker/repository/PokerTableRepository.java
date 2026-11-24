@@ -14,4 +14,8 @@ public interface PokerTableRepository extends MongoRepository<PokerTable, UUID> 
     boolean existsByPlayersUserId(UUID userId);
 
     Optional<PokerTable> findFirstByPlayersUserId(UUID userId);
+
+    Optional<PokerTable> findByRoomCodeIgnoreCase(String roomCode);
+
+    boolean existsByRoomCodeIgnoreCase(String roomCode);
 }

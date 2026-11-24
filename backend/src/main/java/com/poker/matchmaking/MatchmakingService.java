@@ -187,6 +187,7 @@ public class MatchmakingService {
 
     private void matchOrCreateSingle(Ticket ticket) {
         var openTable = tableService.listTables().stream()
+                .filter(t -> !t.privateRoom())
                 .filter(t -> t.variant().equalsIgnoreCase(ticket.config.variant))
                 .filter(t -> t.smallBlind() == ticket.config.smallBlind
                         && t.bigBlind() == ticket.config.bigBlind
@@ -218,7 +219,8 @@ public class MatchmakingService {
                     first.config.smallBlind,
                     first.config.bigBlind,
                     first.config.maxPlayers,
-                    first.config.startingChips
+                    first.config.startingChips,
+                    false
             ));
             for (Ticket ticket : group) {
                 seatWithEscrow(table.id(), ticket);

@@ -47,7 +47,8 @@ class BotFillIntegrationTest extends AbstractMongoTest {
                 5,
                 10,
                 6,
-                1000
+                1000,
+                false
         ));
         UUID tableId = created.id();
         tableService.joinTable(tableId, human.getId(), new JoinTableRequest(null));

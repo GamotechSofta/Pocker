@@ -17,6 +17,7 @@ vi.mock('@/api/tables', () => ({
   createTable: vi.fn(),
   getTable: vi.fn().mockReturnValue(new Promise(() => {})),
   joinTable: vi.fn(),
+  joinTableByCode: vi.fn(),
   leaveTable: vi.fn(),
   startTable: vi.fn(),
   getTableState: vi.fn().mockReturnValue(new Promise(() => {})),
