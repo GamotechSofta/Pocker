@@ -14,7 +14,7 @@
 	<name>poker-backend</name>
 	<description>Play-money poker game backend</description>
 	<properties>
-		<java.version>21</java.version>
+		<java.version>25</java.version>
 		<springdoc.version>3.1.1</springdoc.version>
 	</properties>
 	<dependencies>
