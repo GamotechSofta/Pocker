@@ -23,7 +23,8 @@ vi.mock('@/api/tables', () => ({
   getTableState: vi.fn().mockReturnValue(new Promise(() => {})),
 }))
 
-vi.mock('@/api/auth', () => ({
+vi.mock('@/api/auth', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/api/auth')>(),
   login: vi.fn(),
   register: vi.fn(),
   createGuestSession: vi.fn(),

@@ -1,9 +1,13 @@
 package com.poker.game.engine;
 
-public record TableConfig(int smallBlind, int bigBlind, int startingChips, int maxPlayers, int maxDrawCount) {
+public record TableConfig(int smallBlind, int bigBlind, int startingChips, int maxPlayers, int maxDrawCount, int ante) {
 
     public TableConfig(int smallBlind, int bigBlind, int startingChips, int maxPlayers) {
         this(smallBlind, bigBlind, startingChips, maxPlayers, 5);
+    }
+
+    public TableConfig(int smallBlind, int bigBlind, int startingChips, int maxPlayers, int maxDrawCount) {
+        this(smallBlind, bigBlind, startingChips, maxPlayers, maxDrawCount, 0);
     }
 
     public TableConfig {
@@ -21,6 +25,9 @@ public record TableConfig(int smallBlind, int bigBlind, int startingChips, int m
         }
         if (maxDrawCount < 0 || maxDrawCount > 5) {
             throw new IllegalArgumentException("maxDrawCount must be between 0 and 5");
+        }
+        if (ante < 0 || ante > startingChips) {
+            throw new IllegalArgumentException("ante must fit the starting stack");
         }
     }
 

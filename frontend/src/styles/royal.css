@@ -171,6 +171,97 @@ h1, h2, h3, h4, .font-display {
   pointer-events: auto;
 }
 
+.tournament-game-hud {
+  position: absolute;
+  z-index: 43;
+  top: clamp(27px, 6cqh, 50px);
+  left: clamp(6px, 1.2cqw, 16px);
+  display: grid;
+  gap: 3px;
+  max-width: 82%;
+  white-space: nowrap;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: #102019;
+  color: #f6ecd3;
+  font-size: clamp(8px, min(1.45cqw, 2.3cqh), 14px);
+  pointer-events: none;
+}
+
+.tournament-clock-row {
+  display: flex;
+  align-items: center;
+  gap: 3px clamp(5px, 1cqw, 14px);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.tournament-clock-note { color: #f9d783; }
+.tournament-blind-structure { width: 100%; border-collapse: collapse; text-align: left; }
+.tournament-blind-structure :is(td, th) { padding: 5px; border-bottom: 1px solid #304038; }
+.tournament-blind-structure tr[aria-current] { color: #f9d783; }
+
+.game-frame--tournament .table-perimeter-seats .opponent-seat-pod:is(.pos-top-left, .pos-top-right) {
+  top: 17%;
+}
+
+.tournament-game-hud strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tournament-game-hud span {
+  flex-shrink: 0;
+}
+
+@container table-stage (width < 490px) {
+  .tournament-game-hud {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    max-width: 80%;
+  }
+}
+
+@container table-stage (width < 900px) {
+  .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-top-left {
+    top: 23%;
+    left: 28%;
+  }
+
+  .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-top-right {
+    top: 23%;
+    left: 69%;
+  }
+
+  .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-right {
+    top: 35%;
+  }
+
+  .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-bottom-right {
+    top: 69%;
+  }
+}
+
+body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponent-seat-pod:is(.pos-top-left, .pos-top-right) {
+  top: 23%;
+}
+
+@container table-stage (width < 710px) {
+  .game-frame--tournament .bottom-control-bar {
+    grid-template-columns: minmax(max-content, 1fr) auto max-content;
+    column-gap: 5px;
+    padding-inline: 6px;
+  }
+
+  .game-frame--tournament .bcb-actions {
+    gap: 4px;
+  }
+
+  .game-frame--tournament .bcb-action {
+    padding-inline: 7px;
+  }
+}
+
 .board-info-plate {
   background: rgba(8, 16, 12, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.12);

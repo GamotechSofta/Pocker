@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -25,7 +26,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiError> handleApiException(ApiException ex, HttpServletRequest request) {
-        log.warn("API error {} {} on {}", ex.getCode(), ex.getMessage(), request.getRequestURI());
+        var path = request.getRequestURI();
+        var event = path.startsWith("/api/tournaments/") && path.endsWith("/register")
+                ? "Tournament registration rejected" : "API request rejected";
+        log.atWarn().addKeyValue("code", ex.getCode()).addKeyValue("path", path).log(event);
         return respond(ex.getStatus(), ex.getCode(), ex.getMessage(), request);
     }
 
@@ -73,7 +77,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleUnreadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        log.debug("Unreadable request body on {}", request.getRequestURI(), ex);
+        log.debug("Unreadable request body ({}).", ex.getClass().getSimpleName());
         return respond(HttpStatus.BAD_REQUEST, ErrorCodes.BAD_REQUEST, "Request body is invalid or missing.", request);
     }
 
@@ -95,9 +99,17 @@ public class GlobalExceptionHandler {
         return respond(HttpStatus.NOT_FOUND, ErrorCodes.NOT_FOUND, "The requested resource was not found.", request);
     }
 
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> handleUnsupportedMethod(HttpRequestMethodNotSupportedException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(ex.getHeaders())
+                .body(ApiError.of(405, "METHOD_NOT_ALLOWED", "The request method is unavailable for this resource.",
+                        request.getRequestURI(), List.of()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
-        log.error("Unhandled error on {} {}", request.getMethod(), request.getRequestURI(), ex);
+        log.atError().addKeyValue("method", request.getMethod()).addKeyValue("exception", ex.getClass().getSimpleName())
+                .log("Unhandled HTTP request");
         return respond(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 ErrorCodes.INTERNAL_ERROR,

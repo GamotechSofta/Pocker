@@ -8,6 +8,7 @@ import com.poker.dto.SeatedPlayerResponse;
 import com.poker.dto.ShowdownPlayerResponse;
 import com.poker.dto.TableDetailResponse;
 import com.poker.dto.TableStateResponse;
+import com.poker.dto.TournamentGameInfo;
 import com.poker.dto.TableSummaryResponse;
 import com.poker.entity.PokerTable;
 import com.poker.entity.PokerTablePlayer;
@@ -81,7 +82,7 @@ public final class TableMapper {
     ) {
         GameState state = engine.state();
         String viewerKey = viewerId.toString();
-        boolean revealShowdown = !state.getShowdown().isEmpty();
+        boolean revealShowdown = !table.isTournament() && !state.getShowdown().isEmpty();
         Set<String> revealedIds = state.getShowdown().stream()
                 .map(ShowdownResult::playerId)
                 .collect(Collectors.toSet());
@@ -105,8 +106,8 @@ public final class TableMapper {
                 state.getCurrentBet(),
                 state.getMinimumRaise(),
                 state.getBettingRound().name(),
-                table.getSmallBlind(),
-                table.getBigBlind(),
+                state.getTableConfig().smallBlind(),
+                state.getTableConfig().bigBlind(),
                 state.getCommunityCards().stream().map(Card::code).toList(),
                 players,
                 state.getEvents().stream()
@@ -118,7 +119,8 @@ public final class TableMapper {
                 state.getShowdown().stream()
                         .map(result -> new ShowdownPlayerResponse(
                                 UUID.fromString(result.playerId()),
-                                result.holeCards().stream().map(Card::code).toList(),
+                                table.isTournament() && !result.playerId().equals(viewerKey)
+                                        ? List.of() : result.holeCards().stream().map(Card::code).toList(),
                                 result.evaluation().getRank().name(),
                                 result.evaluation().getDescription()
                         ))
@@ -130,8 +132,17 @@ public final class TableMapper {
                         legal.maxBetOrRaiseTo()
                 ),
                 viewerId,
-                turnDeadline
+                turnDeadline,
+                tournamentInfo(table)
         );
+    }
+
+    private static TournamentGameInfo tournamentInfo(PokerTable table) {
+        var hand = table.getGameplay();
+        if (!table.isTournament() || hand == null) return null;
+        var applied = hand.appliedBlind(table.getInitialBlind());
+        return new TournamentGameInfo(table.getTournamentId(), table.getTableNumber(), applied == null ? table.getInitialBlind().levelNumber() : applied.levelNumber(),
+                hand.revision(), hand.phase().name(), hand.reason(), hand.nextHandAt());
     }
 
     public static TableStatus lobbyStatus(GameStatus status) {

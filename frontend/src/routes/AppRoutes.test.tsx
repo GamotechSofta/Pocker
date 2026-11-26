@@ -1,5 +1,5 @@
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createGuestSession, fetchCurrentUser } from '@/api/auth'
 import { appRouteObjects } from '@/routes/appRouteObjects'
@@ -62,6 +62,25 @@ describe('app routes without login', () => {
   it('redirects old login and register paths to home', async () => {
     renderPath('/login')
     expect(await screen.findByRole('heading', { name: /choose your poker/i })).toBeInTheDocument()
+  })
+
+  it('restores a guest session when the mounted app loses its token', async () => {
+    renderPath('/')
+    expect(await screen.findByRole('heading', { name: /choose your poker/i })).toBeInTheDocument()
+    const user = useAuthStore.getState().user!
+    let resume!: () => void
+    guestMock.mockImplementationOnce(() => new Promise(resolve => {
+      resume = () => resolve({ token: 'replacement-jwt', tokenType: 'Bearer', expiresIn: 3600, user })
+    }))
+
+    act(() => useAuthStore.getState().logout())
+    expect(screen.queryByRole('heading', { name: /choose your poker/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Starting play session…')).toBeInTheDocument()
+    await vi.waitFor(() => expect(guestMock).toHaveBeenCalledTimes(2))
+    await act(async () => resume())
+
+    expect(await screen.findByRole('heading', { name: /choose your poker/i })).toBeInTheDocument()
+    expect(useAuthStore.getState().token).toBe('replacement-jwt')
   })
 
   it('sends the old table lobby to the game picker', async () => {

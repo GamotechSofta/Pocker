@@ -14,8 +14,12 @@
 	<name>poker-backend</name>
 	<description>Play-money poker game backend</description>
 	<properties>
-		<java.version>25</java.version>
+		<java.version>21</java.version>
 		<springdoc.version>3.1.1</springdoc.version>
+		<!-- Security patch releases for the versions managed by Spring Boot 4.1.1. -->
+		<tomcat.version>11.0.25</tomcat.version>
+		<jackson-bom.version>3.1.7</jackson-bom.version>
+		<jackson-2-bom.version>2.21.7</jackson-2-bom.version>
 	</properties>
 	<dependencies>
 		<dependency>

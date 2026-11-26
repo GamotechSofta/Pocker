@@ -1,5 +1,10 @@
 package com.poker.entity;
 
+import com.poker.game.model.GameMode;
+import com.poker.game.engine.TableConfig;
+import com.poker.game.variants.TexasHoldemVariant;
+import com.poker.tournament.entity.BlindLevel;
+import com.poker.tournament.entity.TournamentHand;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -7,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.time.Instant;
 
 @Document(collection = "poker_tables")
 public class PokerTable extends BaseDocument {
@@ -17,6 +23,15 @@ public class PokerTable extends BaseDocument {
     private int bigBlind;
     private int maxPlayers;
     private int startingChips;
+    /** Cash tables remain the default; tournament tables use an explicit isolated mode. */
+    private GameMode gameMode = GameMode.CASH;
+    private UUID tournamentId;
+    private Integer tableNumber;
+    private Instant preparedAt;
+    private BlindLevel initialBlind;
+    private TournamentHand gameplay;
+    private Instant tournamentClosedAt;
+    private boolean tournamentRosterChanged;
     private TableStatus status = TableStatus.WAITING;
     /** Invite code for private rooms (null for public / matchmaking tables). */
     @Indexed(unique = true, sparse = true)
@@ -29,6 +44,30 @@ public class PokerTable extends BaseDocument {
     private List<PokerTablePlayer> players = new ArrayList<>();
 
     protected PokerTable() {
+    }
+
+    public static PokerTable prepareTournament(UUID tournamentId, UUID organizer, String name,
+                                               TableConfig config, BlindLevel initialBlind, Instant preparedAt) {
+        return prepareTournament(tournamentId, organizer, name, config, initialBlind, preparedAt, 1);
+    }
+
+    public static PokerTable prepareTournament(UUID tournamentId, UUID organizer, String name,
+                                               TableConfig config, BlindLevel initialBlind, Instant preparedAt, int number) {
+        var table = new PokerTable();
+        table.ensureId();
+        table.gameMode = GameMode.TOURNAMENT;
+        table.tournamentId = tournamentId;
+        table.tableNumber = number;
+        table.preparedAt = preparedAt;
+        table.initialBlind = initialBlind;
+        table.createdById = organizer;
+        table.name = name;
+        table.variant = TexasHoldemVariant.NAME;
+        table.smallBlind = config.smallBlind();
+        table.bigBlind = config.bigBlind();
+        table.maxPlayers = config.maxPlayers();
+        table.startingChips = config.startingChips();
+        return table;
     }
 
     public PokerTable(
@@ -89,6 +128,46 @@ public class PokerTable extends BaseDocument {
 
     public int getStartingChips() {
         return startingChips;
+    }
+
+    public GameMode getGameMode() {
+        return gameMode;
+    }
+
+    public boolean isTournament() { return gameMode == GameMode.TOURNAMENT; }
+    public UUID getTournamentId() { return tournamentId; }
+    public Integer getTableNumber() { return tableNumber; }
+    public Instant getPreparedAt() { return preparedAt; }
+    public BlindLevel getInitialBlind() { return initialBlind; }
+    public TournamentHand getGameplay() { return gameplay; }
+    public Instant getTournamentClosedAt() { return tournamentClosedAt; }
+    public boolean isTournamentRosterChanged() { return tournamentRosterChanged; }
+
+    public void changeTournamentRoster(Instant closedAt) {
+        if (!isTournament() || gameplay == null || gameplay.settledAt() == null || tournamentClosedAt != null) {
+            throw new IllegalStateException("Tournament seating changes require a settled, open table.");
+        }
+        tournamentRosterChanged = true;
+        tournamentClosedAt = closedAt;
+    }
+
+    public void closeCompletedTournament(Instant now) {
+        if (!isTournament() || tournamentClosedAt != null || gameplay == null || gameplay.settledAt() == null
+                || gameplay.phase() != TournamentHand.Phase.PAUSED || gameplay.nextHandAt() != null || gameplay.turnDeadline() != null) {
+            throw new IllegalStateException("Only a stopped tournament table can close at completion.");
+        }
+        tournamentClosedAt = now;
+    }
+
+    public void recordTournamentHand(TournamentHand hand) {
+        if (!isTournament()) throw new IllegalStateException("Only tournament tables can record a tournament hand.");
+        if (hand.phase() == TournamentHand.Phase.ACTIVE) tournamentRosterChanged = false;
+        gameplay = hand;
+        status = hand.phase() == TournamentHand.Phase.ACTIVE ? TableStatus.PLAYING : TableStatus.WAITING;
+    }
+
+    public void setGameMode(GameMode gameMode) {
+        this.gameMode = gameMode == null ? GameMode.CASH : gameMode;
     }
 
     public TableStatus getStatus() {

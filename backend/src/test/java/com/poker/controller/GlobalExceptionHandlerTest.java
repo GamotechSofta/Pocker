@@ -41,6 +41,13 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void unsupportedMethodReturns405RatherThanServerError() throws Exception {
+        mockMvc.perform(post("/__probe/game-not-found"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+    }
+
+    @Test
     void validationFailureReturnsFieldErrors() throws Exception {
         mockMvc.perform(post("/__probe/validate")
                         .contentType(MediaType.APPLICATION_JSON)

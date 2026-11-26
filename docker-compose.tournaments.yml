@@ -1,0 +1,28 @@
+services:
+  mongo-tournaments:
+    image: mongo:7
+    command: ["mongod", "--replSet", "poker-local", "--bind_ip_all", "--port", "27019"]
+    ports:
+      - "127.0.0.1:27019:27019"
+    volumes:
+      - tournament_dev_data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --port
+        - "27019"
+        - --quiet
+        - --eval
+        - >-
+          try { rs.status(); } catch (e) {
+            if (e.code !== 94) quit(1);
+            rs.initiate({_id:"poker-local",members:[{_id:0,host:"127.0.0.1:27019"}]});
+          }
+          if (!db.hello().isWritablePrimary) quit(1);
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  tournament_dev_data:

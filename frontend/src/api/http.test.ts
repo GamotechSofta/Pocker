@@ -78,4 +78,20 @@ describe('http client', () => {
     expect(useAuthStore.getState().token).toBeNull()
     expect(localStorage.getItem('poker.accessToken')).toBeNull()
   })
+
+  it('keeps the replacement session when an older request returns 401', async () => {
+    const user = { id: 'u1', username: 'p', email: 'p@example.com', createdAt: '2026-01-01T00:00:00Z' }
+    const session = { token: 'old-jwt', tokenType: 'Bearer', expiresIn: 3600, user }
+    useAuthStore.getState().setSession(session)
+    let respond!: (response: Response) => void
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { respond = resolve })))
+    const pendingRequest = http('/api/wallet/balance')
+
+    useAuthStore.getState().setSession({ ...session, token: 'replacement-jwt' })
+    respond(new Response(null, { status: 401 }))
+
+    await expect(pendingRequest).rejects.toMatchObject({ status: 401 })
+    expect(useAuthStore.getState().token).toBe('replacement-jwt')
+    expect(localStorage.getItem('poker.accessToken')).toBe('replacement-jwt')
+  })
 })

@@ -24,12 +24,12 @@ public abstract class AbstractMongoTest {
     private static final String CONNECTION_STRING;
 
     static {
+        String database = "poker_it_" + UUID.randomUUID().toString().substring(0, 8);
         if (MONGO != null) {
             MONGO.start();
-            CONNECTION_STRING = MONGO.getConnectionString();
+            CONNECTION_STRING = MONGO.getConnectionString() + "/" + database;
         } else {
             String base = EXTERNAL_MONGO.endsWith("/") ? EXTERNAL_MONGO : EXTERNAL_MONGO + "/";
-            String database = "poker_it_" + UUID.randomUUID().toString().substring(0, 8);
             CONNECTION_STRING = base + database;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try (MongoClient client = MongoClients.create(EXTERNAL_MONGO)) {
@@ -39,11 +39,17 @@ public abstract class AbstractMongoTest {
                 }
             }));
         }
+        // Spring's test context must see the same URI even when a test class
+        // inherits this fixture through an abstract superclass. The dynamic
+        // property remains registered below for normal context precedence.
+        System.setProperty("spring.mongodb.uri", CONNECTION_STRING);
+        System.setProperty("spring.mongodb.representation.uuid", "standard");
     }
 
     @DynamicPropertySource
     static void mongoProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.mongodb.uri", () -> CONNECTION_STRING);
+        registry.add("spring.mongodb.representation.uuid", () -> "standard");
         registry.add("MONGODB_URI", () -> CONNECTION_STRING);
         registry.add("JWT_SECRET", () -> "test-jwt-secret-key-that-is-32-bytes!");
     }

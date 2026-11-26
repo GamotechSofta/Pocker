@@ -64,7 +64,7 @@ public class BotService {
 
     public void fillAndMaybeStart(UUID tableId) {
         PokerTable table = tableRepository.findById(tableId).orElse(null);
-        if (table == null) {
+        if (table == null || table.isTournament()) {
             return;
         }
         // Private invite-code rooms never fill with bots, but still need the next
@@ -105,7 +105,7 @@ public class BotService {
 
     public void maybeAct(UUID tableId) {
         PokerTable table = tableRepository.findById(tableId).orElse(null);
-        if (table == null) {
+        if (table == null || table.isTournament()) {
             return;
         }
         TexasHoldemEngine engine;
@@ -147,7 +147,7 @@ public class BotService {
 
     long dealAnimationDelayMs(UUID tableId) {
         PokerTable table = tableRepository.findById(tableId).orElse(null);
-        if (table == null) {
+        if (table == null || table.isTournament()) {
             return DealTiming.dealAnimationMs(2, 2);
         }
         return DealTiming.dealAnimationMs(

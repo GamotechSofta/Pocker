@@ -47,3 +47,8 @@ export function startTable(tableId: string): Promise<TableState> {
 export function getTableState(tableId: string): Promise<TableState> {
   return http<TableState>(`/api/tables/${tableId}/state`)
 }
+
+export function getTournamentGame(tableId: string): Promise<[TableDetail, TableState]> {
+  const path = `/api/tournament-tables/${encodeURIComponent(tableId)}`
+  return Promise.all([http<TableDetail>(path), http<TableState>(`${path}/state`)])
+}

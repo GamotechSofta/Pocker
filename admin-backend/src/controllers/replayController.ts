@@ -25,10 +25,12 @@ export async function getGameReplay(req: Request, res: Response): Promise<void> 
       try {
         const uuidObj = new mongoose.mongo.BSON.UUID(cleanId);
         table = await mongoose.connection.db?.collection('poker_tables').findOne({
+          gameMode: { $ne: 'TOURNAMENT' },
           $or: [{ _id: uuidObj as any }, { _id: cleanId as any }, { id: cleanId }],
         });
       } catch {
         table = await mongoose.connection.db?.collection('poker_tables').findOne({
+          gameMode: { $ne: 'TOURNAMENT' },
           $or: [{ _id: cleanId as any }, { id: cleanId }],
         });
       }

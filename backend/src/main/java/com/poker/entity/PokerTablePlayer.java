@@ -22,10 +22,23 @@ public class PokerTablePlayer {
     }
 
     public PokerTablePlayer(User user, int seat, int chipStack, String escrowId) {
+        this(user.getId(), user.getUsername(), user.getEmail(), seat, chipStack, escrowId);
+    }
+
+    public static PokerTablePlayer tournamentSeat(User user, int seat, int stack) {
+        return new PokerTablePlayer(user.getId(), user.getUsername(), null, seat, stack, null);
+    }
+
+    public PokerTablePlayer transferTournamentSeat(int destination) {
+        if (escrowId != null || chipStack <= 0 || destination < 0) throw new IllegalStateException("Invalid tournament transfer seat.");
+        return new PokerTablePlayer(userId, username, null, destination, chipStack, null);
+    }
+
+    private PokerTablePlayer(UUID userId, String username, String email, int seat, int chipStack, String escrowId) {
         this.id = UUID.randomUUID();
-        this.userId = user.getId();
-        this.username = user.getUsername();
-        this.email = user.getEmail();
+        this.userId = userId;
+        this.username = username;
+        this.email = email;
         this.seat = seat;
         this.chipStack = chipStack;
         this.escrowId = escrowId;

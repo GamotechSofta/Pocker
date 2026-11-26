@@ -1,43 +1,187 @@
 services:
   mongo:
-    image: mongo:7
-    container_name: poker-mongo
-    ports:
-      - "${MONGODB_PORT:-27017}:27017"
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  backend:
-    build:
-      context: ./backend
-    container_name: poker-backend
-    ports:
-      - "${SERVER_PORT:-8080}:8080"
+    image: mongo:7.0
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        install -o mongodb -g mongodb -m 0400 /run/secrets/mongo_keyfile /tmp/mongo-keyfile
+        exec docker-entrypoint.sh mongod --replSet poker-staging --bind_ip_all --keyFile /tmp/mongo-keyfile
     environment:
-      SERVER_PORT: 8080
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-      MONGODB_URI: mongodb://mongo:27017/${MONGODB_DB:-poker}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env to a unique value of at least 32 characters}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+    secrets: [mongo_root_password, mongo_keyfile]
+    volumes:
+      - staging_mongo_data:/data/db
+      - ./deploy/mongo-ready.sh:/usr/local/bin/poker-mongo-ready:ro
+    healthcheck:
+      test: ["CMD", "sh", "/usr/local/bin/poker-mongo-ready"]
+      interval: 5s
+      timeout: 8s
+      retries: 24
+      start_period: 15s
+    restart: unless-stopped
+    mem_limit: 2g
+
+  mongo-bootstrap:
+    image: mongo:7.0
+    entrypoint: ["sh", "/usr/local/bin/poker-mongo-bootstrap"]
+    environment:
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:?Set MONGO_APP_USERNAME}
+      MONGODB_DB: ${MONGODB_DB:?Set MONGODB_DB}
     depends_on:
       mongo:
         condition: service_healthy
+    secrets: [mongo_root_password, mongo_app_password]
+    volumes:
+      - ./deploy/mongo-bootstrap.sh:/usr/local/bin/poker-mongo-bootstrap:ro
+    restart: "no"
+
+  backend:
+    build: ./backend
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MONGODB_URI: ${MONGODB_URI:?Set the authenticated MongoDB URI}
+      MONGODB_AUTO_INDEX_CREATION: ${MONGODB_AUTO_INDEX_CREATION:-false}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
+      TOURNAMENT_CLOCK_ADMIN_KEY: ${TOURNAMENT_CLOCK_ADMIN_KEY:?Set TOURNAMENT_CLOCK_ADMIN_KEY}
+      APP_TOURNAMENT_GAMEPLAY_ENABLED: "true"
+      POKER_ALLOWED_ORIGINS: ${PLAYER_ORIGIN:?Set PLAYER_ORIGIN}
+      POKER_RUNTIME_NODE: ${POKER_RUNTIME_NODE:-staging-game-1}
+      JDK_JAVA_OPTIONS: "-XX:MaxRAMPercentage=65"
+    depends_on:
+      mongo-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 40s
+    mem_limit: 1g
+
+  admin-backend:
+    build: ./admin-backend
+    environment:
+      NODE_ENV: production
+      PORT: 5050
+      ADMIN_BIND_ADDRESS: 0.0.0.0
+      MONGODB_URI: ${MONGODB_URI:?Set the authenticated MongoDB URI}
+      MONGODB_AUTO_INDEX_CREATION: ${MONGODB_AUTO_INDEX_CREATION:-false}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?Set ADMIN_JWT_SECRET}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
+      TOURNAMENT_CLOCK_ADMIN_KEY: ${TOURNAMENT_CLOCK_ADMIN_KEY:?Set TOURNAMENT_CLOCK_ADMIN_KEY}
+      ADMIN_ALLOWED_ORIGINS: ${ADMIN_ORIGIN:?Set ADMIN_ORIGIN}
+      ADMIN_TRUST_PROXY: "1"
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+      GAME_SERVICE_URL: http://backend:8080
+    depends_on:
+      mongo-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5050/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    stop_grace_period: 35s
+    mem_limit: 384m
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
-        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8080}
-    container_name: poker-frontend
+    build: ./frontend
     ports:
-      - "5173:80"
+      - "127.0.0.1:${PLAYER_PROXY_PORT:-15775}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend-holdem:
+    build:
+      context: .
+      dockerfile: deploy/docker/player-variant.Dockerfile
+      args:
+        VARIANT_DIR: frontend-holdem
+    ports:
+      - "127.0.0.1:${HOLDEM_PROXY_PORT:-15776}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend-omaha:
+    build:
+      context: .
+      dockerfile: deploy/docker/player-variant.Dockerfile
+      args:
+        VARIANT_DIR: frontend-omaha
+    ports:
+      - "127.0.0.1:${OMAHA_PROXY_PORT:-15777}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend-pineapple:
+    build:
+      context: .
+      dockerfile: deploy/docker/player-variant.Dockerfile
+      args:
+        VARIANT_DIR: frontend-pineapple
+    ports:
+      - "127.0.0.1:${PINEAPPLE_PROXY_PORT:-15778}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend-five-card:
+    build:
+      context: .
+      dockerfile: deploy/docker/player-variant.Dockerfile
+      args:
+        VARIANT_DIR: frontend-five-card
+    ports:
+      - "127.0.0.1:${FIVE_CARD_PROXY_PORT:-15779}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend-razz:
+    build:
+      context: .
+      dockerfile: deploy/docker/player-variant.Dockerfile
+      args:
+        VARIANT_DIR: frontend-razz
+    ports:
+      - "127.0.0.1:${RAZZ_PROXY_PORT:-15780}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  admin-frontend:
+    build: ./admin-frontend
+    ports:
+      - "127.0.0.1:${ADMIN_PROXY_PORT:-15680}:80"
+    depends_on:
+      admin-backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+secrets:
+  mongo_root_password:
+    file: ${MONGO_ROOT_PASSWORD_FILE:-.secrets/mongo-root-password}
+  mongo_app_password:
+    file: ${MONGO_APP_PASSWORD_FILE:-.secrets/mongo-app-password}
+  mongo_keyfile:
+    file: ${MONGO_KEYFILE_FILE:-.secrets/mongo-keyfile}
 
 volumes:
-  mongo_data:
+  staging_mongo_data:

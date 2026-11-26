@@ -21,7 +21,8 @@ type HandResultPageProps = {
   variantName: string
   /** Chip stacks when this hand started, to show each player's net result. */
   startStacks: Record<string, number> | null
-  countdownSeconds: number
+  countdownSeconds: number | null
+  tournament?: boolean
   busy: boolean
   onContinue: () => void
   onLeave: () => void
@@ -42,6 +43,7 @@ export function HandResultPage({
   variantName,
   startStacks,
   countdownSeconds,
+  tournament,
   busy,
   onContinue,
   onLeave,
@@ -54,7 +56,7 @@ export function HandResultPage({
   const split = winners.size > 1
 
   useEffect(() => {
-    const timer = window.setInterval(() => setSecondsLeft((seconds) => Math.max(0, seconds - 1)), 1000)
+    const timer = window.setInterval(() => setSecondsLeft((seconds) => seconds === null ? null : Math.max(0, seconds - 1)), 1000)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -113,7 +115,8 @@ export function HandResultPage({
     >
       <header className="result-top-bar">
         <div className="result-top-left">
-          <button type="button" className="result-back-btn" disabled={busy} onClick={onLeave} title="Leave table and return to lobby">
+          <button type="button" className="result-back-btn" disabled={busy} onClick={onLeave}
+            title={tournament ? 'Return to tournament lobby' : 'Leave table and return to lobby'}>
             <LogOut size={15} />
             Leave Table
           </button>
@@ -139,12 +142,12 @@ export function HandResultPage({
               {headline}
             </h1>
             <p className="result-hero-subtitle">{subtitle}</p>
-            <div className="royal-next-deal-pill">
+            {secondsLeft !== null ? <div className="royal-next-deal-pill">
               <RotateCcw size={14} style={{ animation: 'spin 4s linear infinite' }} />
               <span>
                 Next hand starting in <strong>{secondsLeft}s</strong>…
               </span>
-            </div>
+            </div> : <p className="royal-next-deal-pill">Table paused</p>}
           </div>
 
           {state.communityCards.length > 0 && (
@@ -183,7 +186,7 @@ export function HandResultPage({
           <div className="result-sheet-header">
             <div className="result-sheet-title">
               <Layers size={15} />
-              <span>SHOWDOWN SCOREBOARD</span>
+              <span>{tournament ? 'HAND SETTLEMENT' : 'SHOWDOWN SCOREBOARD'}</span>
             </div>
             <button
               type="button"
@@ -195,11 +198,11 @@ export function HandResultPage({
             >
               {showAllCards ? (
                 <>
-                  <EyeOff size={13} /> Collapse Cards
+                  <EyeOff size={13} /> {tournament ? 'Hide my cards' : 'Collapse Cards'}
                 </>
               ) : (
                 <>
-                  <Eye size={13} /> Expand All Cards
+                  <Eye size={13} /> {tournament ? 'Show my cards' : 'Expand All Cards'}
                 </>
               )}
             </button>
@@ -215,9 +218,9 @@ export function HandResultPage({
               <div key={row.player.playerId} className={`result-sheet-row ${row.won ? 'winner-row' : ''}`}>
                 <div className="result-row-summary">
                   <div className="result-row-player">
-                    <div className={`result-row-rank ${row.won ? 'result-row-rank--winner' : 'result-row-rank--normal'}`}>
+                    {!tournament && <div className={`result-row-rank ${row.won ? 'result-row-rank--winner' : 'result-row-rank--normal'}`}>
                       #{index + 1}
-                    </div>
+                    </div>}
                     <img className="royal-result-avatar" src={row.photo} alt="" draggable={false} />
                     <div className="result-row-meta">
                       <div className="result-row-name-line">
@@ -294,7 +297,7 @@ export function HandResultPage({
         <footer className="result-bottom-bar">
           <button type="button" className="result-btn-leave" disabled={busy} onClick={onLeave}>
             <LogOut size={16} />
-            Leave Table
+            {tournament ? 'Tournament Lobby' : 'Leave Table'}
           </button>
           <button
             type="button"
@@ -305,7 +308,7 @@ export function HandResultPage({
             }}
           >
             <RotateCcw size={17} />
-            Back to Table ({secondsLeft}s)
+            {secondsLeft === null ? 'Back to Table' : `Back to Table (${secondsLeft}s)`}
           </button>
         </footer>
       </main>

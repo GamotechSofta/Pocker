@@ -19,6 +19,9 @@ function applyMessage(raw: IMessage): void {
   if (payload.state) {
     useGameStore.getState().setGameState(payload.state)
   }
+  if (payload.clock) useGameStore.getState().setBlindClock(payload.clock)
+  if (payload.leaderboard) useGameStore.getState().setLeaderboard(payload.leaderboard)
+  if (payload.assignment) useGameStore.getState().setAssignment(payload.assignment)
 }
 
 export class GameSocket {
@@ -26,6 +29,7 @@ export class GameSocket {
   private tableId: string | null = null
   private token: string | null = null
   private tableSubscription: StompSubscription | null = null
+  private subscribedTable: string | null = null
   private errorSubscription: StompSubscription | null = null
   private manualClose = false
   private sessionStarted = false
@@ -92,6 +96,7 @@ export class GameSocket {
         },
         onWebSocketClose: () => {
           this.tableSubscription = null
+          this.subscribedTable = null
           this.errorSubscription = null
           if (this.manualClose) {
             if (useGameStore.getState().connectionStatus !== 'error') {
@@ -130,6 +135,7 @@ export class GameSocket {
         amount: request.amount ?? null,
         indices: request.indices ?? null,
         requestId: request.requestId ?? newActionRequestId(),
+        actionVersion: request.actionVersion,
       }),
     })
   }
@@ -159,6 +165,7 @@ export class GameSocket {
       // ignore
     }
     this.tableSubscription = null
+    this.subscribedTable = null
     this.errorSubscription = null
     const client = this.client
     this.client = null
@@ -172,6 +179,8 @@ export class GameSocket {
     if (!this.client?.connected) {
       return
     }
+    if (!this.errorSubscription) this.errorSubscription = this.client.subscribe(errorsQueueDestination(), applyMessage)
+    if (this.subscribedTable === this.tableId) return
     try {
       if (this.client?.connected) {
         this.tableSubscription?.unsubscribe()
@@ -179,19 +188,11 @@ export class GameSocket {
     } catch {
       // ignore
     }
-    try {
-      if (this.client?.connected) {
-        this.errorSubscription?.unsubscribe()
-      }
-    } catch {
-      // ignore
-    }
     this.tableSubscription = null
-    this.errorSubscription = null
+    this.subscribedTable = this.tableId
     if (this.tableId) {
       this.tableSubscription = this.client.subscribe(gameQueueDestination(this.tableId), applyMessage)
     }
-    this.errorSubscription = this.client.subscribe(errorsQueueDestination(), applyMessage)
   }
 }
 

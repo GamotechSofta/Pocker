@@ -212,8 +212,8 @@ export async function getOverviewMetrics(req: Request, res: Response): Promise<v
     let liveTables = systemDiagnostics.liveTables || 0;
     let activeTables = systemDiagnostics.activeTables || 0;
     if (liveTables === 0) {
-      liveTables = await PokerTable.countDocuments({ status: { $in: ['PLAYING', 'WAITING', 'IN_PROGRESS'] } });
-      activeTables = await PokerTable.countDocuments({ status: 'PLAYING' });
+      liveTables = await PokerTable.countDocuments({ gameMode: { $ne: 'TOURNAMENT' }, status: { $in: ['PLAYING', 'WAITING', 'IN_PROGRESS'] } });
+      activeTables = await PokerTable.countDocuments({ gameMode: { $ne: 'TOURNAMENT' }, status: 'PLAYING' });
     }
 
     res.json({

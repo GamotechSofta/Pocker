@@ -32,7 +32,7 @@ public class Deck {
     }
 
     /**
-     * Draw-order deck for tests. Does not reset to a full 52-card set.
+     * Loads a supplied draw order, including a previously persisted shuffle.
      */
     public static Deck ofCards(List<Card> cards) {
         Deck deck = new Deck(new Random(0L));

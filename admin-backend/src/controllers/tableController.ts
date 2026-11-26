@@ -20,7 +20,7 @@ export async function getLiveTables(req: Request, res: Response): Promise<void> 
 
     // If no games found in 'games', check 'poker_tables'
     if (liveGames.length === 0) {
-      const tableQuery: any = {};
+      const tableQuery: any = { gameMode: { $ne: 'TOURNAMENT' } };
       if (variant && typeof variant === 'string' && variant !== 'ALL') {
         tableQuery.variant = new RegExp(variant, 'i');
       }
@@ -74,6 +74,10 @@ export async function terminateTable(req: AdminAuthRequest, res: Response): Prom
       uuidObj = new mongoose.mongo.BSON.UUID(String(tableId));
     } catch {}
 
+    if (uuidObj && await PokerTable.collection.findOne({ _id: uuidObj, gameMode: 'TOURNAMENT' })) {
+      return void res.status(409).json({ success: false, message: 'Use Tournament Management for this table.' });
+    }
+
     // Update MongoDB records in both collections
     await Promise.all([
       Game.updateMany(
@@ -81,7 +85,7 @@ export async function terminateTable(req: AdminAuthRequest, res: Response): Prom
         { $set: { status: 'ABORTED', finishedAt: new Date() } }
       ),
       PokerTable.updateMany(
-        { $or: [{ _id: tableId as any }, { _id: uuidObj as any }, { id: tableId }] },
+        { gameMode: { $ne: 'TOURNAMENT' }, $or: [{ _id: tableId as any }, { _id: uuidObj as any }, { id: tableId }] },
         { $set: { status: 'FINISHED' } }
       ),
     ]);

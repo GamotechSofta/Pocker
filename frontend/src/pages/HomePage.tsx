@@ -1,5 +1,7 @@
+import { lockedPokerVariant } from '@/config/variantApp'
 import { LobbyScreen } from '@/royal/LobbyScreen'
 
 export function HomePage() {
-  return <LobbyScreen />
+  const locked = lockedPokerVariant()
+  return <LobbyScreen initialVariant={locked ?? undefined} />
 }

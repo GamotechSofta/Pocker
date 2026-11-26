@@ -12,6 +12,10 @@ import { LiveTablesPage } from './pages/LiveTablesPage';
 import { HandReplayPage } from './pages/HandReplayPage';
 import { GameDetailPage } from './pages/GameDetailPage';
 import { RulesConfigPage } from './pages/RulesConfigPage';
+const TournamentsPage = React.lazy(() => import('./pages/TournamentsPage').then(page => ({ default: page.TournamentsPage })));
+const TournamentEditPage = React.lazy(() => import('./pages/TournamentFormPage').then(page => ({ default: page.TournamentEditPage })));
+const TournamentFormPage = React.lazy(() => import('./pages/TournamentFormPage').then(page => ({ default: page.TournamentFormPage })));
+const TournamentDetailsPage = React.lazy(() => import('./pages/TournamentDetailsPage').then(page => ({ default: page.TournamentDetailsPage })));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -30,7 +34,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 export const App: React.FC = () => {
   return (
     <AuthProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
@@ -38,7 +42,9 @@ export const App: React.FC = () => {
             path="/"
             element={
               <ProtectedRoute>
-                <AdminLayout />
+                <React.Suspense fallback={<p role="status">Loading admin page…</p>}>
+                  <AdminLayout />
+                </React.Suspense>
               </ProtectedRoute>
             }
           >
@@ -60,6 +66,10 @@ export const App: React.FC = () => {
             <Route path="games/:gameId" element={<GameDetailPage />} />
             <Route path="replay" element={<HandReplayPage />} />
             <Route path="config" element={<RulesConfigPage />} />
+            <Route path="tournaments" element={<TournamentsPage />} />
+            <Route path="tournaments/new" element={<TournamentFormPage />} />
+            <Route path="tournaments/:id/edit" element={<TournamentEditPage />} />
+            <Route path="tournaments/:id" element={<TournamentDetailsPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

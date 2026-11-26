@@ -1,62 +1,52 @@
 import { useEffect, useState } from 'react'
 import { createGuestSession, fetchCurrentUser } from '@/api/auth'
+import { ApiRequestError } from '@/api/errors'
 import { useAuthStore } from '@/store/authStore'
 
-/** Ensures a playable session exists — silent guest token when embedding without login. */
-export function useSessionReady(): boolean {
-  const [ready, setReady] = useState(false)
+export function useSessionReady() {
+  const token = useAuthStore(state => state.token)
+  const user = useAuthStore(state => state.user)
+  const ready = Boolean(token && user)
+  const [failed, setFailed] = useState(false)
+  const [attemptKey, setAttemptKey] = useState(0)
 
   useEffect(() => {
-    let cancelled = false
+    if (ready) return
 
-    async function bootstrap() {
-      for (let attempt = 0; attempt < 3 && !cancelled; attempt++) {
-        const store = useAuthStore.getState()
-        try {
-          if (store.token) {
-            if (!store.user) {
-              const user = await fetchCurrentUser()
-              if (!cancelled) {
-                useAuthStore.getState().setUser(user)
-              }
-            }
-          } else {
-            const session = await createGuestSession()
-            if (!cancelled) {
-              useAuthStore.getState().setSession(session)
-            }
-          }
-          if (!cancelled && useAuthStore.getState().token) {
-            setReady(true)
-            return
-          }
-        } catch {
-          if (!cancelled) {
-            useAuthStore.getState().logout()
-          }
-          // brief pause then retry guest creation
-          await new Promise((resolve) => window.setTimeout(resolve, 350 * (attempt + 1)))
-        }
-      }
-      // Last resort: one more guest attempt, then unblock UI.
-      if (!cancelled && !useAuthStore.getState().token) {
-        try {
+    let cancelled = false
+    let timer: number
+    const current = () => !cancelled && useAuthStore.getState().token === token
+
+    async function bootstrap(attempt: number) {
+      try {
+        if (token) {
+          const profile = await fetchCurrentUser()
+          if (current()) useAuthStore.getState().setUser(profile)
+        } else {
           const session = await createGuestSession()
-          useAuthStore.getState().setSession(session)
-        } catch {
-          // play actions will call ensureGuestSession again
+          if (current()) useAuthStore.getState().setSession(session)
         }
-      }
-      if (!cancelled) {
-        setReady(true)
+      } catch (error) {
+        if (!current()) return
+        if (token && error instanceof ApiRequestError && error.status === 404) {
+          useAuthStore.getState().logout()
+          return
+        }
+        if (attempt < 2) {
+          timer = window.setTimeout(() => void bootstrap(attempt + 1), 350 * (attempt + 1))
+        } else {
+          setFailed(true)
+        }
       }
     }
 
-    void bootstrap()
+    setFailed(false)
+    timer = window.setTimeout(() => void bootstrap(0), 0)
     return () => {
       cancelled = true
+      window.clearTimeout(timer)
     }
-  }, [])
+  }, [token, ready, attemptKey])
 
-  return ready
+  return { ready, failed, retry: () => setAttemptKey(key => key + 1) }
 }

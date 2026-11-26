@@ -110,7 +110,7 @@ public class TableService {
     }
 
     public java.util.Optional<UUID> seatedTableId(UUID userId) {
-        return tableRepository.findFirstByPlayersUserId(userId).map(PokerTable::getId);
+        return tableRepository.findCashTablesByPlayersUserId(userId).stream().findFirst().map(PokerTable::getId);
     }
 
     public TableDetailResponse createTable(UUID userId, CreateTableRequest request) {
@@ -165,7 +165,7 @@ public class TableService {
         String code = normalizeRoomCode(rawCode);
         PokerTable table = tableRepository.findByRoomCodeIgnoreCase(code)
                 .orElseThrow(() -> new InvalidGameActionException("No room found for code " + code + "."));
-        if (!table.isPrivateRoom()) {
+        if (table.isTournament() || !table.isPrivateRoom()) {
             throw new InvalidGameActionException("That table is not joinable by invite code.");
         }
         if (table.getStatus() != com.poker.entity.TableStatus.WAITING
@@ -328,7 +328,7 @@ public class TableService {
     public boolean maybeStartNextHand(UUID tableId) {
         synchronized (lockFor(tableId)) {
             PokerTable table = tableRepository.findById(tableId).orElse(null);
-            if (table == null) {
+            if (table == null || table.isTournament()) {
                 return false;
             }
             TexasHoldemEngine engine = engineFor(table);
@@ -436,7 +436,7 @@ public class TableService {
 
     /** Refunds OPEN escrows whose player is no longer seated (restart / abandoned tables). */
     public int recoverOrphanEscrows() {
-        var seatedKeys = tableRepository.findAll().stream()
+        var seatedKeys = tableRepository.findAllByOrderByCreatedAtDesc().stream()
                 .flatMap(t -> t.getPlayers().stream().map(p -> t.getId() + ":" + p.getUserId()))
                 .collect(java.util.stream.Collectors.toSet());
         int refunded = 0;
@@ -476,7 +476,7 @@ public class TableService {
     public Optional<Instant> turnDeadline(UUID tableId) {
         synchronized (lockFor(tableId)) {
             PokerTable table = tableRepository.findById(tableId).orElse(null);
-            if (table == null) {
+            if (table == null || table.isTournament()) {
                 turnTimers.remove(tableId);
                 return Optional.empty();
             }
@@ -492,7 +492,7 @@ public class TableService {
         synchronized (lockFor(tableId)) {
             PokerTable table = tableRepository.findById(tableId).orElse(null);
             TurnTimer timer = turnTimers.get(tableId);
-            if (table == null || timer == null || Instant.now().isBefore(timer.deadline())) {
+            if (table == null || table.isTournament() || timer == null || Instant.now().isBefore(timer.deadline())) {
                 return false;
             }
             TexasHoldemEngine engine = engineFor(table);
@@ -606,7 +606,7 @@ public class TableService {
     public boolean markConnected(UUID tableId, UUID userId, boolean connected) {
         synchronized (lockFor(tableId)) {
             PokerTable table = tableRepository.findById(tableId).orElse(null);
-            if (table == null) {
+            if (table == null || table.isTournament()) {
                 return false;
             }
             TexasHoldemEngine engine = engineFor(table);
@@ -619,7 +619,7 @@ public class TableService {
 
     public List<UUID> seatedUserIds(UUID tableId) {
         PokerTable table = tableRepository.findById(tableId).orElse(null);
-        if (table == null) {
+        if (table == null || table.isTournament()) {
             return List.of();
         }
         return table.getPlayers().stream()
@@ -716,7 +716,12 @@ public class TableService {
 
     private PokerTable requireTable(UUID tableId) {
         return tableRepository.findById(tableId)
+                .filter(table -> !table.isTournament())
                 .orElseThrow(() -> new GameNotFoundException(tableId));
+    }
+
+    public boolean isTournamentTable(UUID id) {
+        return tableRepository.findById(id).filter(PokerTable::isTournament).isPresent();
     }
 
     private User requireUser(UUID userId) {

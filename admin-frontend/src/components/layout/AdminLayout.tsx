@@ -14,6 +14,8 @@ import {
   Users,
   Radio,
   PowerOff,
+  Trophy,
+  Menu,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
@@ -28,6 +30,7 @@ export const AdminLayout: React.FC = () => {
     serverInstanceId: 'game-node-1',
   });
   const [drainingLoading, setDrainingLoading] = useState(false);
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   const fetchTelemetry = async () => {
     try {
@@ -64,7 +67,7 @@ export const AdminLayout: React.FC = () => {
   return (
     <div className="admin-shell">
       {/* Sidebar */}
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar${navigationOpen ? ' admin-sidebar-open' : ''}`} id="admin-sidebar">
         <div className="admin-sidebar-header">
           <div className="admin-brand-icon">♠️</div>
           <div>
@@ -73,7 +76,9 @@ export const AdminLayout: React.FC = () => {
           </div>
         </div>
 
-        <nav className="admin-nav">
+        <nav className="admin-nav" onClick={event => {
+          if ((event.target as Element).closest('a')) setNavigationOpen(false);
+        }}>
           <div className="admin-nav-group-label">OVERVIEW</div>
           <NavLink to="/" end className={({ isActive }) => `admin-nav-item ${isActive ? 'active' : ''}`}>
             <LayoutDashboard size={16} />
@@ -111,6 +116,10 @@ export const AdminLayout: React.FC = () => {
             <Sliders size={16} />
             <span>Rules & Rake Config</span>
           </NavLink>
+          <NavLink to="/tournaments" className={({ isActive }) => `admin-nav-item ${isActive ? 'active' : ''}`}>
+            <Trophy size={16} color="var(--accent-gold)" />
+            <span>Tournament Management</span>
+          </NavLink>
         </nav>
       </aside>
 
@@ -118,6 +127,10 @@ export const AdminLayout: React.FC = () => {
       <div className="admin-main">
         {/* Topbar Telemetry Header */}
         <header className="admin-topbar">
+          <button className="btn admin-menu-toggle" aria-controls="admin-sidebar" aria-expanded={navigationOpen}
+            onClick={() => setNavigationOpen(open => !open)}>
+            <Menu size={15} /> Menu
+          </button>
           <div className="topbar-telemetry">
             <div className="telemetry-pill">
               <span className={`live-dot ${telemetry.liveTables > 0 ? '' : 'amber'}`} />
@@ -166,7 +179,7 @@ export const AdminLayout: React.FC = () => {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid var(--border-subtle)', paddingLeft: '12px' }}>
               <span className="badge badge-amber">{user?.role}</span>
-              <span style={{ fontWeight: 600, color: '#fff', fontSize: '12px' }}>{user?.displayName || user?.username}</span>
+              <span className="admin-operator-name" style={{ fontWeight: 600, color: '#fff', fontSize: '12px' }}>{user?.displayName || user?.username}</span>
               <button onClick={logout} className="btn" style={{ padding: '4px 8px' }} title="Sign Out">
                 <LogOut size={14} />
               </button>

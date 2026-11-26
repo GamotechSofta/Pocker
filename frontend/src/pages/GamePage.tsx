@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AlertCircle, Copy, Menu, Play, RotateCw, Wifi } from 'lucide-react'
-import { getTable, getTableState, leaveTable, startTable } from '@/api/tables'
+import { AlertCircle, Clock3, Copy, Menu, Play, RotateCw, Trophy, Wifi } from 'lucide-react'
+import { http } from '@/api/http'
+import { fetchTournamentLeaderboard, type TournamentAssignment } from '@/api/tournaments'
+import { getTable, getTableState, getTournamentGame, leaveTable, startTable } from '@/api/tables'
 import { soundEngine } from '@/audio/soundEngine'
 import { connectionLabel } from '@/components/table/ConnectionBanner'
 import { LandscapeGate, useLandscapeGate } from '@/components/table/LandscapeGate'
@@ -17,6 +19,9 @@ import { HandResultPage } from '@/royal/board/HandResultPage'
 import { HeroHand } from '@/royal/board/HeroHand'
 import { OpponentPod, type SeatPosition } from '@/royal/board/OpponentPod'
 import { HistorySheet, RankingsSheet, TableMenu } from '@/royal/board/TableSheets'
+import { BlindStructureDialog, TournamentClockHud } from '@/royal/board/TournamentClockHud'
+import { RoyalDialog } from '@/royal/board/RoyalDialog'
+import { LeaderboardRows } from '@/pages/TournamentLeaderboardPage'
 import { FullscreenToggle } from '@/royal/FullscreenToggle'
 import { variantTitle } from '@/royal/pokerVariants'
 import { useProfileStore } from '@/royal/profileStore'
@@ -26,6 +31,7 @@ import { useGameStore } from '@/store/gameStore'
 import { useLobbyStore } from '@/store/lobbyStore'
 import type { TableDetail } from '@/types/api'
 import type { GameActionRequest, PlayerView, TableState } from '@/types/game'
+import type { TournamentClock } from '@/types/tournamentClock'
 import { apiErrorMessage } from '@/utils/apiError'
 import { formatChipCount } from '@/utils/cards'
 import { hasHandResult, showdownFor, winnerIds } from '@/utils/results'
@@ -36,6 +42,7 @@ const RESULT_COUNTDOWN_SECONDS = 7
 /** Let the final action and showdown cards land on the felt before the result page opens. */
 const RESULT_REVEAL_DELAY_MS = 1_400
 const JOIN_WAIT_SECONDS = 15
+const WIDE_FIELD_SEATS = [[12, 65], [10, 43], [18, 23], [32, 22], [48, 21], [64, 22], [80, 23], [90, 43], [88, 64]] as const
 
 /** Clockwise from the viewer, same as the Rummy table; nobody sits in front of the dealer. */
 function perimeterPosition(index: number, total: number): SeatPosition {
@@ -80,12 +87,15 @@ function FlipButton() {
   )
 }
 
-export function GamePage() {
-  const { gameId = '' } = useParams()
+export function GamePage({ tournament = false, assignment }: { tournament?: boolean; assignment?: TournamentAssignment | null }) {
+  const { gameId = '', id: tournamentId = '' } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const { connectionStatus, lastError, connect, sendAction, disconnect } = useGameSocket()
   const state = useGameStore((store) => store.state)
+  const blindClock = useGameStore((store) => store.blindClock)
+  const standingSnapshot = useGameStore((store) => store.leaderboard)
+  const leaderboard = standingSnapshot?.tournamentId === tournamentId ? standingSnapshot : null
   const setGameState = useGameStore((store) => store.setGameState)
   const resetGame = useGameStore((store) => store.resetGame)
   const setLastError = useGameStore((store) => store.setLastError)
@@ -102,6 +112,13 @@ export function GamePage() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [rankingsOpen, setRankingsOpen] = useState(false)
+  const [standingsError, setStandingsError] = useState<string | null>(null)
+  const [blindStructureOpen, setBlindStructureOpen] = useState(false)
+  const clockRequest = useRef<AbortController | null>(null)
+  const standingsRequest = useRef<AbortController | null>(null)
+  const observedStanding = useRef<number | null>(null)
+  const [eliminationNotice, setEliminationNotice] = useState('')
+  const clockSnapshot = blindClock?.snapshot.tournamentId === tournamentId ? blindClock : null
   const [selected, setSelected] = useState<number[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [arrivalNotice, setArrivalNotice] = useState<string | null>(null)
@@ -120,6 +137,7 @@ export function GamePage() {
   const [startingHand, setStartingHand] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const seenPlayersRef = useRef<Set<string> | null>(null)
+  const sendLock = useRef(false)
 
   const viewer = state?.players.find((player) => player.playerId === user?.id)
   const maxPlayers = table?.maxPlayers ?? TABLE_DEFAULTS.maxPlayers
@@ -127,11 +145,11 @@ export function GamePage() {
   seatedRef.current = seated
   const idle = isHandIdle(state?.status ?? table?.status)
   const complete = hasHandResult(state)
-  const waitingForPlayers = !state || (idle && !complete && state.handNumber === 0)
+  const waitingForPlayers = !tournament && (!state || (idle && !complete && state.handNumber === 0))
   const privateRoom = Boolean(table?.privateRoom)
   const roomCode = table?.roomCode?.trim() || null
   const isHost = Boolean(user?.id && table?.createdBy === user.id)
-  const seatedCount = state?.players.length ?? table?.players.length ?? 0
+  const seatedCount = leaderboard?.statistics.activePlayers ?? state?.players.length ?? table?.players.length ?? 0
   const canHostStart = privateRoom && isHost && waitingForPlayers && seatedCount >= 2 && !startingHand
   const actor = state?.players.find((player) => player.isTurn)
   const seatNames = useMemo(() => seatNameMap(state?.players ?? []), [state?.players])
@@ -157,11 +175,12 @@ export function GamePage() {
     async (quiet = false) => {
       if (!quiet) setLoading(true)
       try {
-        const [detail, snapshot] = await Promise.all([getTable(gameId), getTableState(gameId)])
+        const [detail, snapshot] = tournament
+          ? await getTournamentGame(gameId) : await Promise.all([getTable(gameId), getTableState(gameId)])
         if (!alive.current) return
         setLoadError(null)
         setTable(detail)
-        setCurrentTable(detail)
+        if (!tournament) setCurrentTable(detail)
         setGameState(snapshot)
       } catch (cause: unknown) {
         if (alive.current) setLoadError(apiErrorMessage(cause))
@@ -169,32 +188,95 @@ export function GamePage() {
         if (alive.current && !quiet) setLoading(false)
       }
     },
-    [gameId, setCurrentTable, setGameState],
+    [gameId, setCurrentTable, setGameState, tournament],
   )
+
+  const loadClock = useCallback(() => {
+    if (!tournament || !tournamentId || clockRequest.current) return
+    const controller = new AbortController()
+    clockRequest.current = controller
+    void http<TournamentClock>(`/api/tournaments/${encodeURIComponent(tournamentId)}/clock`, { signal: controller.signal })
+      .then(snapshot => { if (!controller.signal.aborted) useGameStore.getState().setBlindClock(snapshot) })
+      .catch(() => { /* The authenticated socket supplies the same clock on reconnect. */ })
+      .finally(() => { if (clockRequest.current === controller) clockRequest.current = null })
+  }, [tournament, tournamentId])
+
+  const loadStandings = useCallback(() => {
+    if (!tournament || !tournamentId || standingsRequest.current) return
+    const controller = new AbortController()
+    standingsRequest.current = controller
+    void fetchTournamentLeaderboard(tournamentId, controller.signal)
+      .then(snapshot => {
+        if (controller.signal.aborted) return
+        useGameStore.getState().setLeaderboard(snapshot)
+        setStandingsError(null)
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setStandingsError(apiErrorMessage(cause))
+      })
+      .finally(() => { if (standingsRequest.current === controller) standingsRequest.current = null })
+  }, [tournament, tournamentId])
 
   useEffect(() => {
     gameSocket.setOnReady(() => {
       void load(true)
+      loadClock()
+      loadStandings()
     })
     return () => gameSocket.setOnReady(null)
-  }, [load])
+  }, [load, loadClock, loadStandings])
 
   useEffect(() => {
     alive.current = true
     resetGame()
     void load()
+    loadClock()
+    loadStandings()
     void connect(gameId).catch((cause: unknown) => {
       if (alive.current) setLoadError(apiErrorMessage(cause))
     })
     return () => {
       alive.current = false
+      clockRequest.current?.abort()
+      clockRequest.current = null
+      standingsRequest.current?.abort()
+      standingsRequest.current = null
+      observedStanding.current = null
       stopAllSounds()
       disconnect()
       resetGame()
     }
-  }, [connect, disconnect, gameId, load, resetGame, stopAllSounds])
+  }, [connect, disconnect, gameId, load, loadClock, loadStandings, resetGame, stopAllSounds])
 
   useEffect(() => {
+    if (!tournament || connectionStatus === 'connected') return
+    const timer = window.setInterval(loadStandings, 3000)
+    return () => window.clearInterval(timer)
+  }, [connectionStatus, loadStandings, tournament])
+
+  useEffect(() => {
+    if (!leaderboard) return
+    if (leaderboard.viewer?.status === 'ELIMINATED') {
+      navigate(paths.tournamentEliminated(tournamentId), { replace: true })
+      return
+    }
+    if (observedStanding.current !== null && leaderboard.version > observedStanding.current && leaderboard.recentEliminations.length) {
+      const rows = leaderboard.recentEliminations
+      setEliminationNotice(rows.length === 1
+        ? `${displaySeatName(rows[0].displayName)} eliminated · Final #${rows[0].finishPosition}`
+        : `${rows.length} players eliminated`)
+    }
+    observedStanding.current = leaderboard.version
+  }, [leaderboard, navigate, tournamentId])
+
+  useEffect(() => {
+    if (!eliminationNotice) return
+    const timer = window.setTimeout(() => setEliminationNotice(''), 5000)
+    return () => window.clearTimeout(timer)
+  }, [eliminationNotice])
+
+  useEffect(() => {
+    if (tournament) return
     const leaveOnPageHide = () => {
       if (!seatedRef.current || leaveRequested.current) return
       leaveRequested.current = true
@@ -207,21 +289,27 @@ export function GamePage() {
       window.removeEventListener('pagehide', leaveOnPageHide)
       leaveOnPageHide()
     }
-  }, [gameId])
+  }, [gameId, tournament])
 
   useEffect(() => {
+    sendLock.current = false
     setSending(false)
     setSelected([])
-  }, [state?.bettingRound, state?.currentTurnSeat, state?.events.length, state?.handNumber])
+  }, [state?.bettingRound, state?.currentTurnSeat, state?.events.length, state?.handNumber, state?.tournament?.actionVersion])
 
   useEffect(() => {
     if (!lastError) return
+    sendLock.current = false
     setSending(false)
     setToast(lastError.message)
     soundEngine.play('error')
+  }, [lastError])
+
+  useEffect(() => {
+    if (!toast) return
     const timer = window.setTimeout(() => setToast(null), 3500)
     return () => window.clearTimeout(timer)
-  }, [lastError])
+  }, [toast])
 
   // Chips each player started the hand with, to show net wins and losses on the result page.
   useEffect(() => {
@@ -312,11 +400,14 @@ export function GamePage() {
   }, [viewer?.isTurn, dealPlaying, idle])
 
   function onPlayerAction(request: GameActionRequest) {
+    if (tournament && (sendLock.current || state?.tournament?.phase !== 'ACTIVE' || leaderboard?.viewer?.status === 'ELIMINATED')) return
     setLastError(null)
+    sendLock.current = tournament
     setSending(true)
     try {
-      sendAction(gameId, request)
+      sendAction(gameId, tournament ? { ...request, actionVersion: state?.tournament?.actionVersion } : request)
     } catch (cause: unknown) {
+      sendLock.current = false
       setSending(false)
       setToast(apiErrorMessage(cause))
     }
@@ -325,6 +416,10 @@ export function GamePage() {
   async function onLeaveTable() {
     soundEngine.play('click')
     stopAllSounds()
+    if (tournament) {
+      navigate(paths.tournaments, { replace: true })
+      return
+    }
     leaveRequested.current = true
     setBusy(true)
     try {
@@ -377,6 +472,8 @@ export function GamePage() {
   const bigBlind = state?.bigBlind ?? table?.bigBlind ?? TABLE_DEFAULTS.bigBlind
   const street = formatStreet(state?.bettingRound === 'NONE' || !state ? (state?.status ?? 'WAITING') : state.bettingRound)
   const online = connectionStatus === 'connected'
+  const paused = state?.tournament?.phase === 'PAUSED'
+  const recovery = state?.tournament?.reason === 'HAND_RECOVERY_REQUIRED'
 
   const opponents = useMemo(() => {
     const players = state?.players ?? []
@@ -385,7 +482,7 @@ export function GamePage() {
     return players.filter((player) => player.playerId !== user?.id).sort((a, b) => offset(a.seat) - offset(b.seat))
   }, [state?.players, viewer?.seat, maxPlayers, user?.id])
 
-  const seatSlots: Array<{ key: string; seat: number; player?: PlayerView; position: SeatPosition }> = useMemo(() => {
+  const seatSlots: Array<{ key: string; seat: number; player?: PlayerView; position: SeatPosition; placement?: readonly [number, number] }> = useMemo(() => {
     if (waitingForPlayers) {
       const viewerSeat = viewer?.seat ?? 0
       const count = Math.max(1, maxPlayers - 1)
@@ -404,8 +501,10 @@ export function GamePage() {
       seat: player.seat,
       player,
       position: perimeterPosition(index, opponents.length),
+      placement: tournament && opponents.length > 5
+        ? WIDE_FIELD_SEATS[Math.round(index * (WIDE_FIELD_SEATS.length - 1) / (opponents.length - 1))] : undefined,
     }))
-  }, [waitingForPlayers, viewer?.seat, maxPlayers, state?.players, opponents, user?.id])
+  }, [waitingForPlayers, viewer?.seat, maxPlayers, state?.players, opponents, user?.id, tournament])
 
   const drawMode = state?.status === 'DRAW'
   const viewerCards = viewer?.holeCards ?? []
@@ -437,8 +536,9 @@ export function GamePage() {
             {loadError ?? 'Taking your seat — hang tight.'}
           </div>
           {loadError && !loading && (
-            <button type="button" className="royal-btn-gold" style={{ marginTop: 16 }} onClick={() => navigate(paths.home)}>
-              Back to lobby
+            <button type="button" className="royal-btn-gold" style={{ marginTop: 16 }} onClick={() =>
+              navigate(tournament ? paths.tournamentPreparation(tournamentId) : paths.home)}>
+              {tournament ? 'Check table assignment' : 'Back to lobby'}
             </button>
           )}
         </div>
@@ -448,7 +548,7 @@ export function GamePage() {
 
   return (
     <LandscapeGate enabled hideFloatingBadge>
-      <div className="game-frame game-frame--board-only">
+      <div className={`game-frame game-frame--board-only${tournament ? ' game-frame--tournament' : ''}`}>
         <h1 className="sr-only">{state.name}</h1>
         <span className="sr-only" data-testid="ws-status">
           {connectionLabel(connectionStatus)}
@@ -460,6 +560,7 @@ export function GamePage() {
             <span>{toast}</span>
           </div>
         )}
+        {eliminationNotice && <div className="board-arrival-toast" role="status">{eliminationNotice}</div>}
 
         {waitingForPlayers && arrivalNotice && (
           <div className="board-arrival-toast" role="status">
@@ -473,12 +574,12 @@ export function GamePage() {
               <div className="board-info-plate">
                 <div className="board-info-row">
                   <span className="board-info-variant">
-                    <span className="board-info-variant-title">{variantName}</span>
+                    <span className="board-info-variant-title">{tournament ? 'Tournament' : variantName}</span>
                     <span className="board-info-variant-stake">
                       {' '}
                       · Blinds {formatChipCount(smallBlind)}/{formatChipCount(bigBlind)}
                     </span>
-                    <span className="board-info-variant-seats"> · {maxPlayers} Players</span>
+                    <span className="board-info-variant-seats"> · {tournament ? seatedCount : maxPlayers} Players</span>
                   </span>
                   {state.handNumber > 0 && (
                     <>
@@ -504,6 +605,8 @@ export function GamePage() {
               </div>
               <div className="board-hud-right">
                 <FlipButton />
+                {clockSnapshot && <button type="button" className="board-hud-menu" aria-label="Blind Structure" title="Blind Structure"
+                  onClick={() => setBlindStructureOpen(true)}><Clock3 size={16} /></button>}
                 <SoundToggle compact />
                 <FullscreenToggle compact />
                 <button
@@ -521,6 +624,27 @@ export function GamePage() {
               </div>
             </div>
 
+            {state.tournament && <div className="tournament-game-hud" aria-label="Tournament information">
+              <div className="tournament-clock-row">
+                <strong title={state.name}>{state.name}</strong>
+                <span>Table {state.tournament.tableNumber} · Level {state.tournament.blindLevel} · {smallBlind}/{bigBlind}</span>
+                <span>{seatedCount} {leaderboard ? 'active' : 'players'} · {formatChipCount(viewer?.chipStack ?? 0)} virtual chips</span>
+                {assignment?.finalTable && <strong>Final Table</strong>}
+                {assignment?.transfer?.status === 'WAITING_FOR_HANDS' && !assignment.transfer.sourceSettled &&
+                  <span role="status">Upcoming transfer · Table {assignment.transfer.destinationTableNumber}</span>}
+                {leaderboard?.candidateEntrantId && <strong role="status">
+                  {assignment?.finalizationStage === 'CLAIMED' ? 'Finalizing results'
+                    : assignment?.finalizationStage === 'RECOVERY_REQUIRED' ? 'Results require review' : 'Awaiting finalization'}
+                </strong>}
+                {!online && <span role="status">{connectionLabel(connectionStatus)}</span>}
+                {paused && !leaderboard?.candidateEntrantId && state.tournament.reason !== 'ADMINISTRATIVE' && <span role="status">
+                  {recovery || state.tournament.reason === 'ELIMINATION_REVIEW_REQUIRED' ? 'Table paused for review'
+                    : state.tournament.reason === 'WAITING_FOR_TOURNAMENT_PLAYERS' ? 'Waiting for tournament seating'
+                      : 'Paused · fewer than two players have chips'}</span>}
+              </div>
+              {clockSnapshot && <TournamentClockHud {...clockSnapshot} appliedLevel={state.tournament.blindLevel} online={online} />}
+            </div>}
+
             <div className="table-perimeter-seats" aria-label="Opponents">
               {seatSlots.length === 0 ? (
                 <div className="opponent-waiting-pod">
@@ -531,11 +655,16 @@ export function GamePage() {
                 seatSlots.map((slot) => {
                   const player = slot.player
                   const won = Boolean(player && winners.has(player.playerId))
+                  const eliminated = Boolean(player && leaderboard?.rows.some(row =>
+                    row.tableNumber === state.tournament?.tableNumber && row.seat === slot.seat &&
+                    row.displayName === player.username && row.finishPosition !== null))
                   return (
                     <OpponentPod
                       key={slot.key}
                       seatNumber={slot.seat}
                       position={slot.position}
+                      placement={slot.placement}
+                      eliminated={eliminated}
                       player={player}
                       name={player ? nameFor(player) : undefined}
                       dealer={!idle && state.dealerSeat === slot.seat}
@@ -646,11 +775,12 @@ export function GamePage() {
                 dealer={Boolean(viewer && !idle && state.dealerSeat === viewer.seat)}
                 blind={viewer ? blindTag(state, viewer.seat) : null}
                 badge={viewerBadge}
-                isMyTurn={Boolean(viewer?.isTurn) && !handOver}
+                isMyTurn={Boolean(viewer?.isTurn) && !handOver && leaderboard?.viewer?.status !== 'ELIMINATED'}
                 turnDeadline={state.turnDeadline ?? null}
                 dealing={dealPlaying}
                 idle={idle}
                 complete={complete}
+                paused={paused}
                 connected={online}
                 sending={sending}
                 waitingFor={actor ? nameFor(actor) : undefined}
@@ -664,13 +794,14 @@ export function GamePage() {
                   soundEngine.play('click')
                   setHistoryOpen(true)
                 }}
+                rankingsLabel={tournament ? 'Standings' : undefined}
                 onOpenRankings={() => {
                   soundEngine.play('click')
                   setRankingsOpen(true)
                 }}
                 onBackToLobby={() => {
                   soundEngine.play('click')
-                  navigate(paths.home, { replace: true })
+                  navigate(tournament ? paths.tournaments : paths.home, { replace: true })
                 }}
               />
             </section>
@@ -698,6 +829,7 @@ export function GamePage() {
             bigBlind={bigBlind}
             tableId={state.tableId}
             handLive={handLive}
+            tournament={tournament}
             committed={Math.max(0, committedThisHand)}
             busy={busy}
             onResume={() => setMenuOpen(false)}
@@ -719,7 +851,16 @@ export function GamePage() {
           />
         )}
 
-        {rankingsOpen && <RankingsSheet variant={variant} onClose={() => setRankingsOpen(false)} />}
+        {rankingsOpen && (tournament ? <RoyalDialog label="Live Leaderboard" title="Live Leaderboard" subtitle={state.name}
+          icon={<Trophy />} wide onClose={() => setRankingsOpen(false)}
+          actions={<button type="button" className="royal-btn-gold" onClick={() => setRankingsOpen(false)}>Back to table</button>}>
+          {!online && leaderboard && <p role="status">Standings may be stale.</p>}
+          {leaderboard ? <LeaderboardRows data={leaderboard} /> : standingsError ?
+            <p role="alert">{standingsError} <button type="button" onClick={loadStandings}>Retry</button></p> :
+            <p role="status">Loading standings…</p>}
+        </RoyalDialog> : <RankingsSheet variant={variant} onClose={() => setRankingsOpen(false)} />)}
+        {blindStructureOpen && clockSnapshot && state.tournament &&
+          <BlindStructureDialog clock={clockSnapshot.snapshot} appliedLevel={state.tournament.blindLevel} close={() => setBlindStructureOpen(false)} />}
 
         {showResult && (
           <HandResultPage
@@ -733,7 +874,10 @@ export function GamePage() {
             startStacks={
               handStart && Object.keys(handStart.stacks).length > 0 ? handStart.stacks : null
             }
-            countdownSeconds={Math.max(1, RESULT_COUNTDOWN_SECONDS - Math.round(RESULT_REVEAL_DELAY_MS / 1000))}
+            countdownSeconds={tournament
+              ? (state.tournament?.nextHandAt ? Math.max(0, Math.ceil((Date.parse(state.tournament.nextHandAt) - Date.now()) / 1000)) : null)
+              : Math.max(1, RESULT_COUNTDOWN_SECONDS - Math.round(RESULT_REVEAL_DELAY_MS / 1000))}
+            tournament={tournament}
             busy={busy}
             onContinue={() => {
               setDismissedResult(state.handNumber)

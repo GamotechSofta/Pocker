@@ -80,6 +80,14 @@ public class TexasHoldemEngine {
     }
 
     public void sitPlayer(String playerId, String username, int seat, int chips) {
+        if (chips <= 0) {
+            throw GameActionException.invalid("Players must sit with a positive chip stack.");
+        }
+        restoreSeat(playerId, username, seat, chips);
+    }
+
+    /** Restores a persisted seat, including a zero-stack seat that will sit out. */
+    public void restoreSeat(String playerId, String username, int seat, int chips) {
         requireBetweenHands();
         if (seat < 0 || seat >= config.maxPlayers()) {
             throw GameActionException.seatUnavailable();
@@ -90,11 +98,21 @@ public class TexasHoldemEngine {
         if (state.player(playerId) != null) {
             throw GameActionException.invalid("Player is already seated.");
         }
-        if (chips <= 0) {
-            throw GameActionException.invalid("Players must sit with a positive chip stack.");
+        if (chips < 0) {
+            throw GameActionException.invalid("A restored stack cannot be negative.");
         }
         state.putPlayer(new PlayerState(playerId, username, seat, chips));
         state.addEvent("PLAYER_JOINED", username + " sat in seat " + seat);
+    }
+
+    /** Restores the sequence and button before starting a persisted hand. */
+    public void restoreHandBoundary(int completedHandNumber, int previousDealerSeat) {
+        if (state.getStatus() != GameStatus.WAITING || state.getHandNumber() != 0 || completedHandNumber < 0
+                || previousDealerSeat < -1 || previousDealerSeat >= config.maxPlayers()) {
+            throw new IllegalArgumentException("Invalid hand boundary.");
+        }
+        state.setHandNumber(completedHandNumber);
+        state.setDealerSeat(previousDealerSeat);
     }
 
     public void setConnected(String playerId, boolean connected) {
@@ -189,6 +207,7 @@ public class TexasHoldemEngine {
         moveDealerButton(eligible);
         assignBlinds(eligible);
         dealHoleCards(eligible);
+        postAntes(eligible);
         postBlinds();
         state.addEvent("HAND_STARTED", "Hand " + state.getHandNumber());
         if (variant.requiresDiscardBeforeFlop()) {
@@ -293,14 +312,14 @@ public class TexasHoldemEngine {
             if (player.getChipStack() > 0 && (player.isRaiseAllowed() || !allInIsRaise)) {
                 actions.add(ActionType.ALL_IN);
             }
-            int minRaiseTo = state.getCurrentBet() + state.getMinimumRaise();
+            long minRaiseTo = (long) state.getCurrentBet() + state.getMinimumRaise();
             if (player.isRaiseAllowed() && player.getChipStack() > callAmount && maxTo >= minRaiseTo) {
                 actions.add(ActionType.RAISE);
             }
         }
 
         int minTo = facingBet
-                ? state.getCurrentBet() + state.getMinimumRaise()
+                ? (int) Math.min(Integer.MAX_VALUE, (long) state.getCurrentBet() + state.getMinimumRaise())
                 : config.bigBlind();
         return new LegalActions(actions, callAmount, minTo, maxTo);
     }
@@ -531,7 +550,7 @@ public class TexasHoldemEngine {
         }
         int raiseBy = toAmount - state.getCurrentBet();
         boolean shortAllIn = needed == player.getChipStack();
-        int minimumTo = openingBet ? config.bigBlind() : state.getCurrentBet() + state.getMinimumRaise();
+        long minimumTo = openingBet ? config.bigBlind() : (long) state.getCurrentBet() + state.getMinimumRaise();
         boolean fullRaise = openingBet
                 ? toAmount >= config.bigBlind()
                 : raiseBy >= state.getMinimumRaise();
@@ -855,6 +874,16 @@ public class TexasHoldemEngine {
         state.setLastRaiseAmount(config.bigBlind());
         state.setMinimumRaise(config.bigBlind());
         state.addEvent("BLINDS_POSTED", "SB " + small.getUsername() + ", BB " + big.getUsername());
+    }
+
+    private void postAntes(List<PlayerState> eligible) {
+        if (config.ante() == 0) return;
+        for (var player : eligible) {
+            potManager.collectBet(player, Math.min(config.ante(), player.getChipStack()));
+            // Antes build the pot without counting toward the current street's live bet.
+            player.resetForBettingRound();
+        }
+        state.addEvent("ANTES_POSTED", "Ante " + config.ante());
     }
 
     private void moveDealerButton(List<PlayerState> eligible) {

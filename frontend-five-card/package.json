@@ -1,0 +1,11 @@
+{
+  "name": "@pocker/five-card-draw",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm --prefix ../frontend exec -- vite --config ../frontend-five-card/vite.config.ts",
+    "build": "npm --prefix ../frontend exec -- vite build --config ../frontend-five-card/vite.config.ts",
+    "preview": "npm --prefix ../frontend exec -- vite preview --config ../frontend-five-card/vite.config.ts"
+  }
+}

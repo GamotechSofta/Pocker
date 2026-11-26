@@ -15,6 +15,7 @@ type TableMenuProps = {
   handLive: boolean
   committed: number
   busy: boolean
+  tournament?: boolean
   onResume: () => void
   onLeave: () => void
 }
@@ -28,15 +29,16 @@ export function TableMenu({
   handLive,
   committed,
   busy,
+  tournament,
   onResume,
   onLeave,
 }: TableMenuProps) {
   return (
     <RoyalDialog
       label="Table Details & Leave Confirmation"
-      title={handLive ? 'Leave Active Table?' : 'Table Details'}
+      title={tournament ? 'Tournament Table' : handLive ? 'Leave Active Table?' : 'Table Details'}
       subtitle={
-        handLive
+        tournament ? 'Your seat stays assigned. The server still enforces your turn timer.' : handLive
           ? 'Your hand is live. Leaving now folds it, and chips already in the pot stay there.'
           : 'No hand in play for you right now. You can leave without losing anything.'
       }
@@ -56,7 +58,7 @@ export function TableMenu({
           </button>
           <button type="button" className="royal-btn-danger" disabled={busy} onClick={onLeave}>
             <LogOut size={16} />
-            Leave Table
+            {tournament ? 'Tournament Lobby' : 'Leave Table'}
           </button>
         </>
       }
@@ -84,7 +86,7 @@ export function TableMenu({
         </div>
       </div>
 
-      {handLive && (
+      {handLive && !tournament && (
         <div className="royal-dialog-penalty-box">
           <div className="royal-dialog-penalty-label">
             <span className="royal-dialog-penalty-tag">

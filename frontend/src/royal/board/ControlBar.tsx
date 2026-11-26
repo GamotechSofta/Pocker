@@ -24,6 +24,7 @@ type ControlBarProps = {
   dealing: boolean
   idle: boolean
   complete: boolean
+  paused?: boolean
   connected: boolean
   sending: boolean
   waitingFor?: string
@@ -34,7 +35,8 @@ type ControlBarProps = {
   onClearSelection: () => void
   onAction: (request: GameActionRequest) => void
   onOpenHistory: () => void
-  onOpenRankings: () => void
+  onOpenRankings?: () => void
+  rankingsLabel?: string
   onBackToLobby: () => void
 }
 
@@ -60,6 +62,7 @@ export function ControlBar({
   dealing,
   idle,
   complete,
+  paused,
   connected,
   sending,
   waitingFor,
@@ -71,6 +74,7 @@ export function ControlBar({
   onAction,
   onOpenHistory,
   onOpenRankings,
+  rankingsLabel = 'Hands',
   onBackToLobby,
 }: ControlBarProps) {
   const actions = legalActionNames(legal)
@@ -134,10 +138,10 @@ export function ControlBar({
             <ScrollText size={18} />
             History
           </button>
-          <button type="button" className="bcb-tool" onClick={onOpenRankings}>
+          {onOpenRankings && <button type="button" className="bcb-tool" onClick={onOpenRankings}>
             <Trophy size={18} />
-            Hands
-          </button>
+            {rankingsLabel}
+          </button>}
           {selected.length > 0 && (
             <button type="button" className="bcb-tool" onClick={onClearSelection} aria-label="Clear selection">
               <X size={18} />
@@ -207,7 +211,7 @@ export function ControlBar({
           {seated && connected && !dealing && (idle || complete) && (
             <div className="royal-status-pill">
               <i aria-hidden />
-              {complete ? 'Hand complete · next deal shortly' : 'Waiting for players…'}
+              {paused ? 'Table paused' : complete ? 'Hand complete · next deal shortly' : 'Waiting for players…'}
             </div>
           )}
 

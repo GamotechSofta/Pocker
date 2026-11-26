@@ -2,7 +2,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getTable, getTableState, leaveTable } from '@/api/tables'
+import { getTable, getTableState, getTournamentGame, leaveTable } from '@/api/tables'
+import { fetchTournamentAssignment } from '@/api/tournaments'
 import { appRouteObjects } from '@/routes/appRouteObjects'
 import { gameSocket } from '@/services/gameSocket'
 import { useAuthStore } from '@/store/authStore'
@@ -26,6 +27,12 @@ vi.mock('@/api/tables', () => ({
   leaveTable: vi.fn(),
   startTable: vi.fn(),
   getTableState: vi.fn(),
+  getTournamentGame: vi.fn(),
+}))
+
+vi.mock('@/api/tournaments', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/api/tournaments')>(),
+  fetchTournamentAssignment: vi.fn(),
 }))
 
 vi.mock('@/services/gameSocket', () => ({
@@ -234,6 +241,42 @@ describe('GamePage (Royal table)', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Call 10' }))
     expect(sendMock).toHaveBeenCalledWith('t1', { action: 'CALL', amount: null })
+  })
+
+  it('opens the authoritative tournament table and preserves its seat on exit', async () => {
+    vi.mocked(fetchTournamentAssignment).mockResolvedValue({
+      tournamentId: 'event-1', tournamentName: 'Royal Sit & Go', tournamentStatus: 'RUNNING', stage: 'READY',
+      tableId: 't1', tableNumber: 1, seat: 0, startingVirtualChips: 1500, initialBlind: null,
+      assignedAt: null, preparedAt: null, reason: null, serverTime: new Date().toISOString(),
+    })
+    vi.mocked(getTournamentGame).mockResolvedValue([liveTable(), playingState({
+      name: 'Royal Sit & Go', tournament: { tournamentId: 'event-1', tableNumber: 1, blindLevel: 1, actionVersion: 7, phase: 'ACTIVE' },
+    })])
+    const router = createMemoryRouter(appRouteObjects, { initialEntries: ['/tournaments/event-1/table'] })
+    const { unmount } = render(<RouterProvider router={router} />)
+
+    expect(await screen.findByLabelText('Tournament information')).toHaveTextContent('Table 1')
+    expect(router.state.location.pathname).toBe('/tournaments/event-1/play/t1')
+    expect(getTableMock).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Hands' })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Call 10' }))
+    expect(sendMock).toHaveBeenCalledWith('t1', { action: 'CALL', amount: null, actionVersion: 7 })
+    await userEvent.click(screen.getByRole('button', { name: 'Table Menu' }))
+    expect(screen.getByRole('button', { name: 'Tournament Lobby' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Leave Table' })).not.toBeInTheDocument()
+    vi.useFakeTimers()
+    try {
+      act(() => useGameStore.getState().setLastError({ code: 'INVALID_GAME_ACTION', message: 'That turn expired.' }))
+      expect(screen.getByRole('alert')).toHaveTextContent('That turn expired.')
+      act(() => useGameStore.getState().setGameState(useGameStore.getState().state!))
+      act(() => vi.advanceTimersByTime(3500))
+      expect(screen.queryByText('That turn expired.')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+    act(() => window.dispatchEvent(new Event('pagehide')))
+    unmount()
+    expect(leaveMock).not.toHaveBeenCalled()
   })
 
   it('validates the raise amount before sending it', async () => {

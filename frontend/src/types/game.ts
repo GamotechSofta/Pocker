@@ -61,6 +61,15 @@ export type TableState = {
   viewerPlayerId: string
   /** ISO time the player to act must move by; the server auto checks/folds after it. */
   turnDeadline?: string | null
+  tournament?: {
+    tournamentId: string
+    tableNumber: number
+    blindLevel: number
+    actionVersion: number
+    phase: 'ACTIVE' | 'BETWEEN_HANDS' | 'PAUSED'
+    reason?: string | null
+    nextHandAt?: string | null
+  } | null
 }
 
 export type GameActionRequest = {
@@ -68,6 +77,7 @@ export type GameActionRequest = {
   amount?: number | null
   indices?: number[] | null
   requestId?: string | null
+  actionVersion?: number
 }
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'

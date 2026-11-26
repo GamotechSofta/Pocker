@@ -1,12 +1,32 @@
 logging:
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        owner: ${POKER_RUNTIME_NODE:local}
   level:
     root: INFO
     com.poker: INFO
+    org.mongodb.driver.client: WARN
+    org.springframework.web: INFO
 
 management:
   endpoint:
     health:
-      show-details: when_authorized
+      show-details: never
+      show-components: never
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+spring:
+  data:
+    mongodb:
+      auto-index-creation: ${MONGODB_AUTO_INDEX_CREATION:false}
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
 
 springdoc:
   api-docs:

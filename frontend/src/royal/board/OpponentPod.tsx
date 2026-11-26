@@ -24,6 +24,8 @@ type OpponentPodProps = {
   revealed?: string[]
   /** While dealing, how many cards have landed on this seat so far. */
   displayCount?: number
+  placement?: readonly [number, number]
+  eliminated?: boolean
 }
 
 export function OpponentPod({
@@ -39,6 +41,8 @@ export function OpponentPod({
   lost = false,
   revealed = [],
   displayCount,
+  placement,
+  eliminated,
 }: OpponentPodProps) {
   if (!player) {
     return (
@@ -61,12 +65,12 @@ export function OpponentPod({
   const avatar = getAvatarForPlayer(name)
   const folded = player.folded
   const out = player.chipStack <= 0 && !player.allIn && player.holeCards.length === 0
-  const isRightSide = position === 'right' || position === 'top-right' || position === 'bottom-right'
+  const isRightSide = placement ? placement[0] >= 65 : position === 'right' || position === 'top-right' || position === 'bottom-right'
   const holeCount = displayCount ?? player.holeCards.length
   const fanSize = Math.min(5, Math.max(0, holeCount))
   const showFaces = revealed.length > 0 && displayCount === undefined
 
-  const badge = winner
+  const badge = eliminated ? { label: 'ELIMINATED', tone: 'out' } : winner
     ? { label: 'WON', tone: 'won' }
     : folded
       ? { label: 'FOLD', tone: 'dropped' }
@@ -89,6 +93,7 @@ export function OpponentPod({
         gap: '4px',
         zIndex: isTurn ? 20 : 10,
         opacity: out ? 0.65 : 1,
+        ...(placement && { left: `${placement[0]}%`, top: `${placement[1]}%`, right: 'auto', transform: 'translate(-50%, -50%)' }),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexDirection: isRightSide ? 'row-reverse' : 'row' }}>

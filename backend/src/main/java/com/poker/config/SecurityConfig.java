@@ -15,6 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.core.env.Environment;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
@@ -47,7 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/status").permitAll()
                         .requestMatchers("/api/admin/**").permitAll()
                         .requestMatchers("/ws", "/ws/**").permitAll()
-                        .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/actuator/metrics").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated()
                 )
@@ -95,12 +96,14 @@ public class SecurityConfig {
         return Set.of(
                 "local-dev-only-change-me-use-32b-min-secret",
                 "change-me-in-development-only-32b"
-        ).contains(normalized) || normalized.contains("change-me");
+        ).contains(normalized) || normalized.contains("change-me") || normalized.contains("replace-with") || normalized.contains("placeholder");
     }
 
     @Bean
     JwtDecoder jwtDecoder(SecretKey jwtSecretKey) {
-        return NimbusJwtDecoder.withSecretKey(jwtSecretKey).macAlgorithm(MacAlgorithm.HS256).build();
+        var decoder = NimbusJwtDecoder.withSecretKey(jwtSecretKey).macAlgorithm(MacAlgorithm.HS256).build();
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer("poker-backend"));
+        return decoder;
     }
 
     @Bean

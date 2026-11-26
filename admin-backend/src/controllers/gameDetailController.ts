@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Game, GameResult, GameEvent, WalletTransaction } from '../models/GameModels';
 
 interface NormalizedCard {
@@ -235,14 +236,14 @@ export async function getGameDetails(req: Request, res: Response): Promise<void>
     if (!gDoc) {
       let table: any = null;
       try {
-        const mongoose = await import('mongoose');
         const uuidObj = new mongoose.mongo.BSON.UUID(cleanId);
         table = await mongoose.connection.db?.collection('poker_tables').findOne({
+          gameMode: { $ne: 'TOURNAMENT' },
           $or: [{ _id: uuidObj as any }, { _id: cleanId as any }, { id: cleanId }],
         });
       } catch {
-        const mongoose = await import('mongoose');
         table = await mongoose.connection.db?.collection('poker_tables').findOne({
+          gameMode: { $ne: 'TOURNAMENT' },
           $or: [{ _id: cleanId as any }, { id: cleanId }],
         });
       }

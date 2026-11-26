@@ -31,7 +31,8 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<T> 
   const data = text.length > 0 ? parseJson(text) : null
 
   if (!response.ok) {
-    if (response.status === 401 && !AUTH_PATHS_WITHOUT_SESSION.has(path)) {
+    if (response.status === 401 && !AUTH_PATHS_WITHOUT_SESSION.has(path) &&
+        token && headers.get('Authorization') === `Bearer ${token}` && getAccessToken() === token) {
       useAuthStore.getState().logout()
     }
     throw toApiError(response.status, path, data)

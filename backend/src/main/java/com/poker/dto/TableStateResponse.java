@@ -28,6 +28,7 @@ public record TableStateResponse(
         List<ShowdownPlayerResponse> showdown,
         LegalActionsResponse legalActions,
         UUID viewerPlayerId,
-        Instant turnDeadline
+        Instant turnDeadline,
+        TournamentGameInfo tournament
 ) {
 }

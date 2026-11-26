@@ -6,31 +6,29 @@ import { AuditLog } from '../models/AuditLog';
 import { ENV } from '../config/env';
 import { AdminAuthRequest } from '../middleware/authMiddleware';
 
-// Automatically seed super admin on startup if no admin exists
 export async function ensureDefaultAdmin(): Promise<void> {
-  try {
-    const count = await AdminUser.countDocuments();
-    if (count === 0) {
-      const salt = await bcrypt.genSalt(10);
-      const hash = await bcrypt.hash('Admin@12345', salt);
-      await AdminUser.create({
-        username: 'admin',
-        passwordHash: hash,
-        displayName: 'Super Administrator',
-        role: 'SUPER_ADMIN',
-        isActive: true,
-      });
-      console.log('[AdminAuth] Default super admin created: "admin" / "Admin@12345"');
+  if (ENV.PRODUCTION) {
+    const legacy = await AdminUser.findOne({ username: 'admin', isActive: true });
+    if (legacy && await bcrypt.compare('Admin@12345', legacy.passwordHash)) {
+      throw new Error('An active legacy development administrator requires credential rotation');
     }
-  } catch (err: any) {
-    console.error('[AdminAuth] Error seeding default admin:', err.message);
   }
+  if (await AdminUser.exists({})) return;
+  const username = ENV.BOOTSTRAP_USERNAME?.trim().toLowerCase() || (ENV.PRODUCTION ? '' : 'admin');
+  const password = ENV.BOOTSTRAP_PASSWORD || (ENV.PRODUCTION ? '' : 'Admin@12345');
+  if (!username || !password || (ENV.PRODUCTION && (Buffer.byteLength(password) < 16 || password === 'Admin@12345'))
+      || Buffer.byteLength(password) > 72) throw new Error('Provision the initial administrator with a unique bootstrap credential');
+  const passwordHash = await bcrypt.hash(password, 12);
+  await AdminUser.updateOne({ username }, { $setOnInsert: { username, passwordHash,
+    displayName: 'Super Administrator', role: 'SUPER_ADMIN', isActive: true } }, { upsert: true });
+  console.info(JSON.stringify({ event: 'administrator_bootstrapped' }));
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
   try {
     const { username, password } = req.body;
-    if (!username || !password) {
+    if (typeof username !== 'string' || !username.trim() || username.length > 128 || typeof password !== 'string'
+        || !password || Buffer.byteLength(password) > 72) {
       res.status(400).json({ success: false, message: 'Username and password are required' });
       return;
     }
@@ -51,14 +49,9 @@ export async function login(req: Request, res: Response): Promise<void> {
     await user.save();
 
     const token = jwt.sign(
-      {
-        id: user._id.toString(),
-        username: user.username,
-        role: user.role,
-        displayName: user.displayName,
-      },
+      {},
       ENV.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '4h', algorithm: 'HS256', issuer: 'royal-poker-admin', audience: 'royal-poker-operations', subject: user._id.toString() }
     );
 
     await AuditLog.create({
@@ -81,7 +74,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       },
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Could not complete administrative sign-in' });
   }
 }
 
@@ -100,6 +93,6 @@ export async function getProfile(req: AdminAuthRequest, res: Response): Promise<
 
     res.json({ success: true, user });
   } catch (err: any) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Could not load administrative profile' });
   }
 }

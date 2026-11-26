@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 @Component
 public class GameSessionEventListener {
 
-    private static final Pattern GAME_QUEUE = Pattern.compile("/queue/game/([0-9a-fA-F-]{36})");
+    private static final Pattern GAME_QUEUE = Pattern.compile("(?:/user)?/queue/game/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})");
 
     private final GameSessionRegistry sessionRegistry;
     private final TableService tableService;
@@ -45,6 +45,10 @@ public class GameSessionEventListener {
         }
         UUID userId = UUID.fromString(principal.getName());
         sessionRegistry.subscribe(accessor.getSessionId(), userId, tableId);
+        if (tableService.isTournamentTable(tableId)) {
+            broadcaster.sendTournamentToUser(tableId, userId, WsEventType.GAME_STATE);
+            return;
+        }
         boolean reconnected = tableService.markConnected(tableId, userId, true);
         broadcaster.sendToUser(tableId, userId, WsEventType.GAME_STATE);
         if (reconnected) {
@@ -61,6 +65,7 @@ public class GameSessionEventListener {
         if (sessionRegistry.hasRemainingSessions(binding.userId(), binding.tableId())) {
             return;
         }
+        if (tableService.isTournamentTable(binding.tableId())) return;
         tableService.markConnected(binding.tableId(), binding.userId(), false);
         events.publishEvent(new TableUpdatedEvent(binding.tableId(), WsEventType.PLAYER_DISCONNECTED));
     }
@@ -70,7 +75,7 @@ public class GameSessionEventListener {
             return null;
         }
         Matcher matcher = GAME_QUEUE.matcher(destination);
-        if (!matcher.find()) {
+        if (!matcher.matches()) {
             return null;
         }
         return UUID.fromString(matcher.group(1));

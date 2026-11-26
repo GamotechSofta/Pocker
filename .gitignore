@@ -9,3 +9,11 @@ Thumbs.db
 node_modules/
 dist/
 target/
+.secrets/
+.phase12/docker/
+.phase12/java/
+.phase12/node/
+.phase12/*-dist/
+.phase12/baseline-player/
+.phase12/npm-cache*/
+.phase12/recovery/private/

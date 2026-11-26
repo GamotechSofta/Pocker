@@ -1,3 +1,8 @@
+app:
+  tournament:
+    auto-start-enabled: false
+    gameplay-enabled: false
+
 logging:
   level:
     root: INFO

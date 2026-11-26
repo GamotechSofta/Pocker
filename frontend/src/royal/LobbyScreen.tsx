@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   Coins,
@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCw,
   Sparkles,
+  Trophy,
   Users,
   UsersRound,
   X,
@@ -23,6 +24,7 @@ import { createTable, joinTable, joinTableByCode } from '@/api/tables'
 import { fetchWalletBalance } from '@/api/wallet'
 import { soundEngine } from '@/audio/soundEngine'
 import { LandscapeGate, useLandscapeGate } from '@/components/table/LandscapeGate'
+import { isVariantLockedApp, lockedPokerVariant, showTournamentsInApp } from '@/config/variantApp'
 import { paths } from '@/constants/paths'
 import { tryLockLandscape } from '@/hooks/useRequiresLandscape'
 import { FullscreenToggle } from '@/royal/FullscreenToggle'
@@ -153,13 +155,16 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
   const rematchPending = useProfileStore((state) => state.rematchPending)
   const setRematchPending = useProfileStore((state) => state.setRematchPending)
 
-  const knownVariant = POKER_VARIANT_ART.some((variant) => variant.id === initialVariant)
-  const [currentPage, setCurrentPage] = useState<'SELECT_VARIANT' | 'CONFIGURE_TABLE'>(
-    knownVariant ? 'CONFIGURE_TABLE' : 'SELECT_VARIANT',
+  const lockedVariant = lockedPokerVariant()
+  const variantLocked = isVariantLockedApp()
+  const lockedArt = lockedVariant ? POKER_VARIANT_ART.find((variant) => variant.id === lockedVariant) : null
+  const knownVariant =
+    Boolean(lockedVariant) || POKER_VARIANT_ART.some((variant) => variant.id === initialVariant)
+  const defaultVariant = lockedVariant ?? (knownVariant ? initialVariant! : (lastConfig?.variant ?? 'TEXAS_HOLDEM'))
+  const [currentPage, setCurrentPage] = useState<'INTRO' | 'SELECT_VARIANT' | 'CONFIGURE_TABLE'>(
+    variantLocked ? 'INTRO' : knownVariant ? 'CONFIGURE_TABLE' : 'SELECT_VARIANT',
   )
-  const [selectedVariant, setSelectedVariant] = useState(
-    knownVariant ? initialVariant! : (lastConfig?.variant ?? 'TEXAS_HOLDEM'),
-  )
+  const [selectedVariant, setSelectedVariant] = useState(defaultVariant)
   const [selectedPlayers, setSelectedPlayers] = useState(lastConfig?.maxPlayers === 2 ? 2 : 6)
   const [tierIndex, setTierIndex] = useState(() => {
     const saved = BLIND_TIERS.findIndex((tier) => tier.bigBlind === lastConfig?.bigBlind)
@@ -294,12 +299,13 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
     const config = useProfileStore.getState().lastConfig
     setRematchPending(false)
     if (!config) return
-    setSelectedVariant(config.variant)
+    const variant = lockedVariant ?? config.variant
+    setSelectedVariant(variant)
     setSelectedPlayers(config.maxPlayers === 2 ? 2 : 6)
     setCurrentPage('CONFIGURE_TABLE')
     setRematchNotice(true)
-    void startSearch(config)
-  }, [rematchPending, setRematchPending, startSearch])
+    void startSearch({ ...config, variant })
+  }, [rematchPending, setRematchPending, startSearch, lockedVariant])
 
   useEffect(() => {
     if (!isMatchmaking) setRematchNotice(false)
@@ -433,6 +439,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
   }
 
   const backToVariants = () => {
+    if (variantLocked) return
     soundEngine.play('click')
     setCurrentPage('SELECT_VARIANT')
   }
@@ -448,7 +455,9 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
 
   return (
     <LandscapeGate
-      enabled={currentPage !== 'SELECT_VARIANT' || isMatchmaking}
+      // Intro and game-selection screens stay responsive in portrait.
+      // Only the table configuration and active matchmaking need landscape.
+      enabled={currentPage === 'CONFIGURE_TABLE' || isMatchmaking}
       hideFloatingBadge={currentPage === 'CONFIGURE_TABLE'}
     >
       <div
@@ -518,13 +527,37 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
           onBalanceChange={setWalletBalance}
         />
 
-        <main className={`lobby-main${currentPage === 'SELECT_VARIANT' ? ' lobby-main--variants' : ''}`}>
+        <main className={`lobby-main${currentPage === 'SELECT_VARIANT' || currentPage === 'INTRO' ? ' lobby-main--variants' : ''}`}>
+          {currentPage === 'INTRO' && lockedArt && (
+            <div className={`variant-intro-screen variant-intro-screen--${lockedArt.theme}`}>
+              <div className="variant-intro-heading">
+                <span className="variant-intro-eyebrow">Welcome to Royal Poker</span>
+                <h1>{variantTitle(lockedArt.id)}</h1>
+                <p>{lockedArt.tagline}</p>
+              </div>
+              <div className="variant-intro-card">
+                <VariantBanner art={lockedArt} onSelect={() => selectVariant(lockedArt.id)} />
+              </div>
+              <button
+                type="button"
+                className="variant-intro-cta"
+                onClick={() => selectVariant(lockedArt.id)}
+              >
+                ENTER {lockedArt.title.toUpperCase()} <span aria-hidden>→</span>
+              </button>
+            </div>
+          )}
+
           {currentPage === 'SELECT_VARIANT' && (
-            <div className="lobby-variant-hub">
+            <div className={`lobby-variant-hub${variantLocked ? ' lobby-variant-hub--standalone' : ''}`}>
               <div className="lobby-choose-heading">
-                <span className="lobby-choose-eyebrow">Select a game</span>
+                <span className="lobby-choose-eyebrow">{variantLocked ? 'Welcome to Royal Poker' : 'Select a game'}</span>
                 <h1 className="lobby-choose-title">
-                  Choose Your <em>Poker</em>
+                  {variantLocked && lockedVariant ? (
+                    <em>{variantTitle(lockedVariant)}</em>
+                  ) : (
+                    <>Choose Your <em>Poker</em></>
+                  )}
                 </h1>
                 <span className="lobby-choose-ornament" aria-hidden>
                   <i />
@@ -533,8 +566,18 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                 </span>
               </div>
 
-              <div className="variant-cards-row variant-cards-row--five">
-                {POKER_VARIANT_ART.map((art) => (
+              {!variantLocked && showTournamentsInApp() && (
+                <Link className="player-tournament-button player-tournament-entry" to={paths.tournaments}
+                  onClick={() => soundEngine.play('click')}>
+                  <Trophy size={18} aria-hidden="true" /> Tournaments
+                </Link>
+              )}
+
+              <div className={`variant-cards-row variant-cards-row--five${variantLocked ? ' variant-cards-row--standalone' : ''}`}>
+                {(variantLocked && lockedVariant
+                  ? POKER_VARIANT_ART.filter((art) => art.id === lockedVariant)
+                  : POKER_VARIANT_ART
+                ).map((art) => (
                   <VariantBanner key={art.id} art={art} onSelect={() => selectVariant(art.id)} />
                 ))}
               </div>
@@ -544,12 +587,21 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
           {currentPage === 'CONFIGURE_TABLE' && (
             <div className="stake-screen">
               <div className="stake-nav stake-nav--desktop">
-                <button type="button" className="stake-back" onClick={backToVariants}>
-                  <span className="stake-back-icon" aria-hidden>
-                    <ArrowLeft size={14} strokeWidth={2.75} />
-                  </span>
-                  Change Game
-                </button>
+                {!variantLocked ? (
+                  <button type="button" className="stake-back" onClick={backToVariants}>
+                    <span className="stake-back-icon" aria-hidden>
+                      <ArrowLeft size={14} strokeWidth={2.75} />
+                    </span>
+                    Change Game
+                  </button>
+                ) : (
+                  <div className="stake-back" style={{ pointerEvents: 'none', opacity: 0.9 }}>
+                    <span className="stake-back-icon" aria-hidden>
+                      <Sparkles size={14} strokeWidth={2.75} />
+                    </span>
+                    {variantTitle(selectedVariant)}
+                  </div>
+                )}
                 <StakeNavRight />
               </div>
 
@@ -560,12 +612,21 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                 <span className="stake-suit stake-suit-br">♥</span>
 
                 <div className="stake-nav stake-nav--mobile">
-                  <button type="button" className="stake-back" onClick={backToVariants}>
-                    <span className="stake-back-icon" aria-hidden>
-                      <ArrowLeft size={14} strokeWidth={2.75} />
-                    </span>
-                    Change Game
-                  </button>
+                  {!variantLocked ? (
+                    <button type="button" className="stake-back" onClick={backToVariants}>
+                      <span className="stake-back-icon" aria-hidden>
+                        <ArrowLeft size={14} strokeWidth={2.75} />
+                      </span>
+                      Change Game
+                    </button>
+                  ) : (
+                    <div className="stake-back" style={{ pointerEvents: 'none', opacity: 0.9 }}>
+                      <span className="stake-back-icon" aria-hidden>
+                        <Sparkles size={14} strokeWidth={2.75} />
+                      </span>
+                      {variantTitle(selectedVariant)}
+                    </div>
+                  )}
                   <StakeNavRight />
                 </div>
 

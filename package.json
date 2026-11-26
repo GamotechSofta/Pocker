@@ -1,0 +1,20 @@
+{
+  "name": "pocker",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:holdem",
+    "dev:hub": "npm --prefix frontend run dev",
+    "dev:holdem": "npm --prefix frontend exec -- vite --config ./frontend-holdem/vite.config.ts",
+    "dev:omaha": "npm --prefix frontend exec -- vite --config ./frontend-omaha/vite.config.ts",
+    "dev:pineapple": "npm --prefix frontend exec -- vite --config ./frontend-pineapple/vite.config.ts",
+    "dev:five-card": "npm --prefix frontend exec -- vite --config ./frontend-five-card/vite.config.ts",
+    "dev:razz": "npm --prefix frontend exec -- vite --config ./frontend-razz/vite.config.ts",
+    "build:holdem": "npm --prefix frontend exec -- vite build --config ./frontend-holdem/vite.config.ts",
+    "build:omaha": "npm --prefix frontend exec -- vite build --config ./frontend-omaha/vite.config.ts",
+    "build:pineapple": "npm --prefix frontend exec -- vite build --config ./frontend-pineapple/vite.config.ts",
+    "build:five-card": "npm --prefix frontend exec -- vite build --config ./frontend-five-card/vite.config.ts",
+    "build:razz": "npm --prefix frontend exec -- vite build --config ./frontend-razz/vite.config.ts",
+    "build:apps": "npm run build:holdem && npm run build:omaha && npm run build:pineapple && npm run build:five-card && npm run build:razz",
+    "test": "npm --prefix frontend run test"
+  }
+}
