@@ -29,7 +29,7 @@ import java.util.Locale;
 import java.util.Set;
 
 @Configuration
-@EnableConfigurationProperties({JwtProperties.class, TableProperties.class, WalletProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, TableProperties.class, WalletProperties.class, OperationsProperties.class})
 public class SecurityConfig {
 
     @Bean
@@ -44,7 +44,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/guest").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/guest", "/api/auth/launch").permitAll()
                         .requestMatchers("/api/status").permitAll()
                         .requestMatchers("/api/admin/**").permitAll()
                         .requestMatchers("/ws", "/ws/**").permitAll()

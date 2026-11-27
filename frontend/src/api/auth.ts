@@ -22,6 +22,21 @@ export function createGuestSession(): Promise<AuthResponse> {
   })
 }
 
+export function launchOperatorSession(): Promise<AuthResponse> {
+  const query = new URLSearchParams(window.location.search)
+  const token = query.get('token')
+  const partnerCode = query.get('partner_code')
+  const gid = query.get('gid')
+  const username = query.get('username')
+  if (!token || !partnerCode || !gid || !username) {
+    return Promise.reject(new Error('This game must be launched from the operator lobby.'))
+  }
+  return http<AuthResponse>('/api/auth/launch', {
+    method: 'POST',
+    body: JSON.stringify({ token, partnerCode, gid, username, userId: query.get('user_id'), currency: query.get('currency'), lang: query.get('lang'), extsess: query.get('extsess'), closeUrl: query.get('close_url') }),
+  })
+}
+
 export function fetchCurrentUser(): Promise<User> {
   return http<User>('/api/auth/me')
 }

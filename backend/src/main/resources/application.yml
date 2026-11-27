@@ -44,6 +44,9 @@ info:
     phase: 20
 
 app:
+  operations:
+    base-url: ${OPERATIONS_BASE_URL:https://operations.dpbossking.com}
+    internal-key: ${OPERATIONS_INTERNAL_KEY:}
   jwt:
     secret: ${JWT_SECRET:local-dev-only-change-me-use-32b-min-secret}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}

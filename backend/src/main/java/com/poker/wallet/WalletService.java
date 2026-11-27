@@ -1,6 +1,9 @@
 package com.poker.wallet;
 
 import com.poker.config.WalletProperties;
+import com.poker.operations.OperationsWalletClient;
+import com.poker.operations.OperatorSession;
+import com.poker.operations.OperatorSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -38,23 +41,32 @@ public class WalletService {
     private final WalletAccountRepository accountRepository;
     private final WalletTransactionRepository transactionRepository;
     private final WalletProperties walletProperties;
+    private final OperatorSessionRepository operatorSessions;
+    private final OperationsWalletClient operationsWallet;
 
     public WalletService(
             WalletAccountRepository accountRepository,
             WalletTransactionRepository transactionRepository,
-            WalletProperties walletProperties
+            WalletProperties walletProperties, OperatorSessionRepository operatorSessions, OperationsWalletClient operationsWallet
     ) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.walletProperties = walletProperties;
+        this.operatorSessions = operatorSessions;
+        this.operationsWallet = operationsWallet;
     }
 
     public BigDecimal balanceOf(String playerId) {
+        var session = operatorSessions.findByPlayerId(playerId);
+        if (session.isPresent()) return syncOperatorBalance(playerId, session.get());
         return getOrCreateWallet(playerId).getBalance();
     }
 
     public WalletAccount getOrCreateWallet(String playerId) {
         WalletAccount account = loadOrCreate(playerId);
+        if (operatorSessions.findByPlayerId(playerId).isPresent()) {
+            return account;
+        }
         ensureStartingBalance(playerId);
         return accountRepository.findByPlayerId(playerId).orElse(account);
     }
@@ -89,7 +101,8 @@ public class WalletService {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Credit amount must be strictly positive");
         }
-        return applyChange(playerId, amount, type, idempotencyKey, gameId, description, meta);
+        return applyOperatorChange(playerId, amount, type, idempotencyKey, gameId, description, meta, false)
+                .orElseGet(() -> applyChange(playerId, amount, type, idempotencyKey, gameId, description, meta));
     }
 
     public WalletTransaction debit(
@@ -104,7 +117,8 @@ public class WalletService {
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Debit amount must be strictly positive");
         }
-        return applyChange(playerId, amount.negate(), type, idempotencyKey, gameId, description, meta);
+        return applyOperatorChange(playerId, amount, type, idempotencyKey, gameId, description, meta, true)
+                .orElseGet(() -> applyChange(playerId, amount.negate(), type, idempotencyKey, gameId, description, meta));
     }
 
     public List<WalletTransaction> getTransactions(String playerId) {
@@ -131,6 +145,35 @@ public class WalletService {
                 "Play-money Add Cash",
                 Map.of("source", "cashier")
         );
+    }
+
+    private Optional<WalletTransaction> applyOperatorChange(String playerId, BigDecimal amount, String type, String key,
+                                                             String gameId, String description, Map<String, Object> meta,
+                                                             boolean debit) {
+        Optional<OperatorSession> session = operatorSessions.findByPlayerId(playerId);
+        if (session.isEmpty()) return Optional.empty();
+        Optional<WalletTransaction> existing = transactionRepository.findByIdempotencyKey(key);
+        if (existing.isPresent()) return existing;
+        boolean refund = type != null && type.contains("REFUND");
+        BigDecimal remote = operationsWallet.transfer(session.get().getToken(), session.get().getPartnerCode(), session.get().getGid(),
+                debit || refund ? amount : BigDecimal.ZERO, debit || refund ? BigDecimal.ZERO : amount,
+                refund ? "refund" : "spin", key, refund ? 2 : 1, gameId == null ? key : gameId);
+        WalletAccount account = loadOrCreate(playerId);
+        BigDecimal before = account.getBalance();
+        account.setBalance(remote); account.setDepositBalance(remote); account.setWinningsBalance(BigDecimal.ZERO); account.setBonusBalance(BigDecimal.ZERO); account.setUpdatedAt(Instant.now());
+        accountRepository.save(account);
+        WalletTransaction tx = new WalletTransaction(key, playerId, gameId, type, amount, before, remote,
+                account.getCurrency(), description, meta);
+        try { return Optional.of(transactionRepository.insert(tx)); }
+        catch (DuplicateKeyException ignored) { return transactionRepository.findByIdempotencyKey(key); }
+    }
+
+    private BigDecimal syncOperatorBalance(String playerId, OperatorSession session) {
+        BigDecimal remote = operationsWallet.balance(session.getToken(), session.getPartnerCode());
+        WalletAccount account = loadOrCreate(playerId);
+        account.setBalance(remote); account.setDepositBalance(remote); account.setWinningsBalance(BigDecimal.ZERO); account.setBonusBalance(BigDecimal.ZERO); account.setUpdatedAt(Instant.now());
+        accountRepository.save(account);
+        return remote;
     }
 
     private void ensureStartingBalance(String playerId) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createGuestSession, fetchCurrentUser } from '@/api/auth'
+import { fetchCurrentUser, launchOperatorSession } from '@/api/auth'
 import { ApiRequestError } from '@/api/errors'
 import { useAuthStore } from '@/store/authStore'
 
@@ -23,7 +23,7 @@ export function useSessionReady() {
           const profile = await fetchCurrentUser()
           if (current()) useAuthStore.getState().setUser(profile)
         } else {
-          const session = await createGuestSession()
+          const session = await launchOperatorSession()
           if (current()) useAuthStore.getState().setSession(session)
         }
       } catch (error) {

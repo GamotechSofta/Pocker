@@ -4,6 +4,7 @@ import com.poker.dto.AuthResponse;
 import com.poker.dto.LoginRequest;
 import com.poker.dto.RegisterRequest;
 import com.poker.dto.UserResponse;
+import com.poker.dto.GameLaunchRequest;
 import com.poker.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -50,6 +51,12 @@ public class AuthController {
     @Operation(summary = "Create an anonymous guest session for embedded play")
     public AuthResponse guest() {
         return authService.createGuest();
+    }
+
+    @PostMapping("/launch")
+    @Operation(summary = "Bootstrap an operator-launched game session")
+    public AuthResponse launch(@Valid @RequestBody GameLaunchRequest request) {
+        return authService.launch(request);
     }
 
     @GetMapping("/me")
