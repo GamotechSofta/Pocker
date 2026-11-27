@@ -45,8 +45,10 @@ info:
 
 app:
   operations:
-    base-url: ${OPERATIONS_BASE_URL:https://operations.dpbossking.com}
-    internal-key: ${OPERATIONS_INTERNAL_KEY:}
+    # Keep these names aligned with the deployment/local environment contract.
+    # The legacy aliases are accepted to avoid breaking older deployments.
+    base-url: ${OPERATIONS_API_URL:${OPERATIONS_BASE_URL:https://operations.dpbossking.com}}
+    internal-key: ${INTERNAL_SERVICE_KEY:${OPERATIONS_INTERNAL_KEY:}}
   jwt:
     secret: ${JWT_SECRET:local-dev-only-change-me-use-32b-min-secret}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
