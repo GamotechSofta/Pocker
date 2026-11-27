@@ -24,15 +24,16 @@ export function useSessionReady() {
           if (current()) useAuthStore.getState().setUser(profile)
         } else {
           // The operator supplies these values only for real game launches.
-          // A direct localhost URL has no operator session, so keep development
-          // usable with the backend's local guest wallet.
+          // A direct frontend URL has no operator session, so it starts a
+          // separate guest wallet session instead. This keeps both entry paths
+          // usable without exposing the Operations internal key to a browser.
           const query = new URLSearchParams(window.location.search)
           const isOperatorLaunch = Boolean(
             query.get('token') && query.get('partner_code') && query.get('gid') && query.get('username'),
           )
-          const session = import.meta.env.DEV && !isOperatorLaunch
-            ? await createGuestSession()
-            : await launchOperatorSession()
+          const session = isOperatorLaunch
+            ? await launchOperatorSession()
+            : await createGuestSession()
           if (current()) useAuthStore.getState().setSession(session)
         }
       } catch (error) {
