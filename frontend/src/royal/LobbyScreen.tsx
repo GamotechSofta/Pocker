@@ -545,6 +545,12 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
               >
                 ENTER {lockedArt.title.toUpperCase()} <span aria-hidden>→</span>
               </button>
+              {showTournamentsInApp() && (
+                <Link className="player-tournament-button player-tournament-secondary player-tournament-entry" to={paths.tournaments}
+                  onClick={() => soundEngine.play('click')}>
+                  <Trophy size={17} aria-hidden="true" /> Tournaments
+                </Link>
+              )}
             </div>
           )}
 
@@ -566,7 +572,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                 </span>
               </div>
 
-              {!variantLocked && showTournamentsInApp() && (
+              {showTournamentsInApp() && (
                 <Link className="player-tournament-button player-tournament-entry" to={paths.tournaments}
                   onClick={() => soundEngine.play('click')}>
                   <Trophy size={18} aria-hidden="true" /> Tournaments

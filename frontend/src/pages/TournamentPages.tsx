@@ -127,6 +127,21 @@ function Refresh({ busy, onClick }: { busy: boolean; onClick: () => void }) {
   )
 }
 
+function TournamentLobbyIntro() {
+  return (
+    <section className="player-tournament-hero" aria-labelledby="tournament-hero-title">
+      <div className="player-tournament-hero-icon" aria-hidden="true">
+        <Trophy size={30} strokeWidth={1.6} />
+      </div>
+      <div>
+        <span className="player-tournament-hero-eyebrow">Royal Poker Events</span>
+        <h2 id="tournament-hero-title">Tournament Arena</h2>
+        <p>Compete for the final table, track every blind level, and play your way to the championship.</p>
+      </div>
+    </section>
+  )
+}
+
 function Feedback({ busy, error, empty, refresh }: {
   busy: boolean; error?: string; empty?: string; refresh: () => void
 }) {
@@ -203,6 +218,7 @@ export function TournamentLobbyPage() {
         <LockKeyhole size={16} aria-hidden="true" /> Private Tournament
       </Link>
     </>}>
+      <TournamentLobbyIntro />
       <nav className="player-tournament-sections" aria-label="Tournament sections">
         {sections.map(item => (
           <button key={item.key} type="button" aria-pressed={section.key === item.key} onClick={() => select(item.key)}>

@@ -20,6 +20,5 @@ export function lockedVariantTitle(): string {
 
 /** Tournaments in this codebase are Hold'em freeze-out — only show in that app / hub. */
 export function showTournamentsInApp(): boolean {
-  const locked = lockedPokerVariant()
-  return locked == null || locked === 'TEXAS_HOLDEM'
+  return true
 }
