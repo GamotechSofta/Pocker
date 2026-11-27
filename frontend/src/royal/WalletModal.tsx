@@ -7,6 +7,8 @@ import {
   type WalletTransaction,
 } from '@/api/wallet'
 import { useModalScroll } from '@/royal/useModalScroll'
+import { useAuthStore } from '@/store/authStore'
+import { formatWalletAmount } from '@/utils/operatorLaunch'
 
 type WalletModalProps = {
   isOpen: boolean
@@ -31,6 +33,7 @@ function isCredit(type: string): boolean {
 }
 
 export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalProps) {
+  const launch = useAuthStore(state => state.launch)
   const modalScroll = useModalScroll()
   const [balance, setBalance] = useState<number | null>(null)
   const [addCashAmount, setAddCashAmount] = useState(1000)
@@ -146,7 +149,7 @@ export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalPro
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#f8fafc' }}>Wallet</h3>
-              <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>INR (₹) · play-money bankroll</p>
+              <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>{launch ? `${launch.currency} · operator wallet` : 'INR (₹) · play-money bankroll'}</p>
             </div>
           </div>
           <button
@@ -217,11 +220,10 @@ export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalPro
                 margin: '6px 0 4px 0',
               }}
             >
-              <span>₹</span>
               <span>
                 {balance === null
                   ? '—'
-                  : balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  : formatWalletAmount(balance, launch)}
               </span>
             </div>
             <button
@@ -260,7 +262,7 @@ export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalPro
             </div>
           )}
 
-          <button
+          {!launch && <button
             type="button"
             disabled={adding}
             onClick={() => void handleAddCash()}
@@ -283,9 +285,9 @@ export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalPro
             }}
           >
             <PlusCircle size={18} /> {adding ? 'Adding…' : `Add Cash ₹${addCashAmount.toLocaleString('en-IN')}`}
-          </button>
+          </button>}
           <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', marginTop: '-8px' }}>
-            Play-money top-up. Buy-ins are escrowed when you join a table and cashed out when you leave.
+            {launch ? 'Manage deposits and withdrawals through your operator lobby.' : 'Play-money top-up. Buy-ins are escrowed when you join a table and cashed out when you leave.'}
           </div>
 
           <div
@@ -340,7 +342,7 @@ export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalPro
                         </div>
                       </div>
                       <div style={{ fontWeight: 900, color: positive ? '#34d399' : '#f87171' }}>
-                        {positive ? '+' : '-'} ₹ {Math.abs(Number(t.amount)).toFixed(2)}
+                        {positive ? '+' : '-'} {formatWalletAmount(Math.abs(Number(t.amount)), { currency: t.currency || launch?.currency || 'INR', lang: launch?.lang ?? 'en-IN' })}
                       </div>
                     </div>
                   )

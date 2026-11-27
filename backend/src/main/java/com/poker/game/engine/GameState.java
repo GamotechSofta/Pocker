@@ -10,6 +10,31 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class GameState {
+    public record Snapshot(String gameId, String variant, TableConfig tableConfig, GameStatus status, int handNumber,
+                           int dealerSeat, int smallBlindSeat, int bigBlindSeat, int currentTurnSeat,
+                           List<PlayerState.Snapshot> players, List<Card> communityCards, int currentBet,
+                           int minimumRaise, int lastRaiseAmount, BettingRound bettingRound, List<GameEvent> events,
+                           List<Payout> payouts, List<ShowdownResult> showdown, List<SidePot> sidePots, String foldWinnerId) {
+        public Snapshot {
+            players = List.copyOf(players); communityCards = List.copyOf(communityCards); events = List.copyOf(events);
+            payouts = List.copyOf(payouts); showdown = List.copyOf(showdown); sidePots = List.copyOf(sidePots);
+        }
+    }
+    public Snapshot snapshot() {
+        return new Snapshot(gameId, variant, tableConfig, status, handNumber, dealerSeat, smallBlindSeat, bigBlindSeat,
+                currentTurnSeat, seats.values().stream().map(PlayerState::snapshot).toList(), communityCards,
+                currentBet, minimumRaise, lastRaiseAmount, bettingRound, events, payouts, showdown, sidePots, foldWinnerId);
+    }
+    void restoreFrom(Snapshot s) {
+        if (!gameId.equals(s.gameId()) || !variant.equals(s.variant()) || !tableConfig.equals(s.tableConfig())) throw new IllegalArgumentException("Snapshot belongs to another game.");
+        status = s.status(); handNumber = s.handNumber(); dealerSeat = s.dealerSeat(); smallBlindSeat = s.smallBlindSeat();
+        bigBlindSeat = s.bigBlindSeat(); currentTurnSeat = s.currentTurnSeat(); seats.clear();
+        for (PlayerState.Snapshot p : s.players()) seats.put(p.seat(), PlayerState.restore(p));
+        communityCards.clear(); communityCards.addAll(s.communityCards()); currentBet = s.currentBet();
+        minimumRaise = s.minimumRaise(); lastRaiseAmount = s.lastRaiseAmount(); bettingRound = s.bettingRound();
+        events.clear(); events.addAll(s.events()); payouts.clear(); payouts.addAll(s.payouts());
+        showdown.clear(); showdown.addAll(s.showdown()); sidePots.clear(); sidePots.addAll(s.sidePots()); foldWinnerId = s.foldWinnerId();
+    }
 
     private final String gameId;
     private final String variant;

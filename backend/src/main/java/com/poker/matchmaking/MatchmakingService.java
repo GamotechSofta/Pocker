@@ -5,6 +5,8 @@ import com.poker.dto.JoinTableRequest;
 import com.poker.dto.MatchmakingRequest;
 import com.poker.dto.MatchmakingTicketResponse;
 import com.poker.dto.TableDetailResponse;
+import com.poker.exception.ApiException;
+import com.poker.exception.ErrorCodes;
 import com.poker.service.TableService;
 import com.poker.wallet.StakeEscrowService;
 import jakarta.annotation.PostConstruct;
@@ -67,6 +69,11 @@ public class MatchmakingService {
                 if (detail != null && detail.variant() != null && !detail.variant().equalsIgnoreCase(conf.variant())) {
                     shouldResume = false;
                     tableService.leaveTable(seated.get(), userId);
+                }
+            } catch (ApiException ex) {
+                if (ErrorCodes.WALLET_UNAVAILABLE.equals(ex.getCode())
+                        || "OPERATOR_SESSION_EXPIRED".equals(ex.getCode())) {
+                    throw ex;
                 }
             } catch (RuntimeException ex) {
                 // Keep resume if getTable fails

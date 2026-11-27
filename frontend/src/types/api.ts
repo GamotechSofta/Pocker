@@ -19,11 +19,24 @@ export type User = {
   createdAt: string
 }
 
+export type OperatorLaunch = {
+  mode: 'operator'
+  gameCode: string
+  username: string
+  userId?: string | null
+  currency: string
+  lang: string
+  extsess?: string | null
+  closeUrl?: string | null
+  balance: number
+}
+
 export type AuthResponse = {
   token: string
   tokenType: string
   expiresIn: number
   user: User
+  launch?: OperatorLaunch | null
 }
 
 export type RegisterRequest = {

@@ -88,7 +88,7 @@ public class TournamentStandingsService {
         var tableNumbers = tables.stream().collect(Collectors.toMap(PokerTable::getId, PokerTable::getTableNumber));
         var historicalUsers = entries.stream().map(TournamentEntrant::getUserId).filter(user -> !seats.containsKey(user)).toList();
         var names = historicalUsers.isEmpty() ? Map.<UUID, String>of() : tx.find(Query.query(Criteria.where("id").in(historicalUsers)),
-                User.class).stream().collect(Collectors.toMap(User::getId, User::getUsername));
+                User.class).stream().collect(Collectors.toMap(User::getId, User::getDisplayName));
         var active = entries.stream().filter(entry -> entry.getStatus() != ELIMINATED && entry.getCurrentVirtualChips() > 0)
                 .sorted(activeOrder(tableNumbers)).toList();
         var eliminated = entries.stream().filter(entry -> entry.getStatus() == ELIMINATED)

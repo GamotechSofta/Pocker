@@ -44,6 +44,7 @@ import { useAuthStore } from '@/store/authStore'
 import { apiErrorMessage } from '@/utils/apiError'
 import { PLAYER_CHARACTERS, photoForCharacter } from '@/utils/avatarUtils'
 import { formatChipCount } from '@/utils/cards'
+import { exitOperatorGame, formatWalletAmount } from '@/utils/operatorLaunch'
 
 type LobbyScreenProps = {
   initialVariant?: string
@@ -146,7 +147,9 @@ function VariantBanner({ art, onSelect }: { art: PokerVariantArt; onSelect: () =
 
 export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
   const navigate = useNavigate()
-  const displayName = useProfileStore((state) => state.displayName)
+  const profileName = useProfileStore((state) => state.displayName)
+  const launch = useAuthStore(state => state.launch)
+  const displayName = launch?.username ?? profileName
   const setDisplayName = useProfileStore((state) => state.setDisplayName)
   const avatarId = useProfileStore((state) => state.avatarId)
   const setAvatarId = useProfileStore((state) => state.setAvatarId)
@@ -177,7 +180,8 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
   const [rematchNotice, setRematchNotice] = useState(false)
   const [mmQueueTime, setMmQueueTime] = useState(0)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const walletBalance = useAuthStore(state => state.walletBalance)
+  const setWalletBalance = useAuthStore(state => state.setWalletBalance)
   const [walletOpen, setWalletOpen] = useState(false)
   const [isCreatingRoom, setIsCreatingRoom] = useState(false)
   const [joinOpen, setJoinOpen] = useState(false)
@@ -313,7 +317,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
 
   const handlePlay = () => {
     if (walletBalance != null && walletBalance < buyIn) {
-      setErrorMsg(`Insufficient balance. Need ₹${buyIn.toLocaleString('en-IN')} to buy in.`)
+      setErrorMsg(`Insufficient balance. Need ${formatWalletAmount(buyIn, launch)} to buy in.`)
       setWalletOpen(true)
       return
     }
@@ -329,7 +333,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
   const handleCreateRoom = async () => {
     if (creatingRef.current || isMatchmaking || isJoiningRoom) return
     if (walletBalance != null && walletBalance < buyIn) {
-      setErrorMsg(`Insufficient balance. Need ₹${buyIn.toLocaleString('en-IN')} to buy in.`)
+      setErrorMsg(`Insufficient balance. Need ${formatWalletAmount(buyIn, launch)} to buy in.`)
       setWalletOpen(true)
       return
     }
@@ -393,7 +397,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
         table = await joinTableByCode({ code })
       } catch (cause: unknown) {
         // Stale/missing token on 2nd laptop — mint a fresh guest and retry once.
-        if (cause instanceof ApiRequestError && cause.status === 401) {
+        if (cause instanceof ApiRequestError && cause.status === 401 && !useAuthStore.getState().launch && !useAuthStore.getState().sessionBlocked) {
           useAuthStore.getState().logout()
           await ensureGuestSession()
           table = await joinTableByCode({ code })
@@ -470,6 +474,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
           </div>
 
           <div className="lobby-top-actions">
+            {launch && <button type="button" className="lobby-link-btn" onClick={() => exitOperatorGame(launch.closeUrl)}><DoorOpen size={16} /> Exit</button>}
             <SoundToggle compact />
             <FullscreenToggle compact />
 
@@ -489,13 +494,14 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
               <button
                 type="button"
                 className="lobby-link-btn"
+                disabled={Boolean(launch)}
                 onClick={() => {
                   soundEngine.play('click')
                   setIsEditingName(true)
                 }}
               >
                 {displayName || 'Player'}
-                <Pencil size={12} strokeWidth={2} />
+                {!launch && <Pencil size={12} strokeWidth={2} />}
               </button>
             )}
 
@@ -512,7 +518,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
               <span>
                 {walletBalance == null
                   ? 'Wallet'
-                  : `₹${walletBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+                  : formatWalletAmount(walletBalance, launch)}
               </span>
             </button>
           </div>

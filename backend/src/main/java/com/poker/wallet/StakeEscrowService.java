@@ -56,45 +56,69 @@ public class StakeEscrowService {
         if (amount <= 0) {
             throw new IllegalArgumentException("Buy-in amount must be positive");
         }
-        String key = "STAKE_" + java.util.UUID.randomUUID();
-        open(key, playerId, amount, null, null);
+        // Retry with the same transaction ID if an unassigned buy-in is awaiting wallet confirmation.
+        String existingPendingKey = findOpenForPlayer(playerId).stream()
+                .filter(e -> e.getTableId() == null && e.getAmount() == amount)
+                .map(StakeEscrow::getId)
+                .filter(wallet::hasPendingOrConfirmedOperatorTransfer)
+                .findFirst()
+                .orElse(null);
+        String key = existingPendingKey != null ? existingPendingKey : "STAKE_" + java.util.UUID.randomUUID();
+        return reserveEntry(playerId, amount, description, key);
+    }
+
+    public String reserveEntry(String playerId, long amount, String description, String explicitKey) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(explicitKey, "explicitKey");
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Buy-in amount must be positive");
+        }
+        open(explicitKey, playerId, amount, null, null);
         try {
             wallet.debit(
                     playerId,
                     BigDecimal.valueOf(amount),
                     WalletService.TX_GAME_ENTRY_STAKE,
-                    key,
+                    explicitKey,
                     null,
                     description != null ? description : "Table buy-in",
                     Map.of("amount", amount)
             );
-            return key;
+            return explicitKey;
         } catch (RuntimeException ex) {
-            discard(key);
+            if (!wallet.hasPendingOrConfirmedOperatorTransfer(explicitKey)) {
+                discard(explicitKey);
+            }
             throw ex;
         }
     }
 
     public String reserveRebuy(String playerId, long amount, String tableId) {
+        return reserveRebuy(playerId, amount, tableId, "REBUY_" + tableId + "_" + playerId + "_" + java.util.UUID.randomUUID());
+    }
+
+    public String reserveRebuy(String playerId, long amount, String tableId, String explicitKey) {
         Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(explicitKey, "explicitKey");
         if (amount <= 0) {
             throw new IllegalArgumentException("Rebuy amount must be positive");
         }
-        String key = "REBUY_" + tableId + "_" + playerId + "_" + java.util.UUID.randomUUID();
-        open(key, playerId, amount, tableId, null);
+        open(explicitKey, playerId, amount, tableId, null);
         try {
             wallet.debit(
                     playerId,
                     BigDecimal.valueOf(amount),
                     WalletService.TX_REBUY,
-                    key,
+                    explicitKey,
                     tableId,
                     "Table rebuy",
                     Map.of("tableId", tableId)
             );
-            return key;
+            return explicitKey;
         } catch (RuntimeException ex) {
-            discard(key);
+            if (!wallet.hasPendingOrConfirmedOperatorTransfer(explicitKey)) {
+                discard(explicitKey);
+            }
             throw ex;
         }
     }
@@ -188,7 +212,7 @@ public class StakeEscrowService {
         if (!Status.OPEN.name().equals(escrow.getStatus())) {
             return false;
         }
-        if (!wallet.hasTransaction(escrowId)) {
+        if (!wallet.verifyOrRecoverDebitForRefund(escrowId)) {
             discard(escrowId);
             return false;
         }

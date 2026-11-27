@@ -4,6 +4,10 @@ public record AuthResponse(
         String token,
         String tokenType,
         long expiresIn,
-        UserResponse user
+        UserResponse user,
+        LaunchMetadata launch
 ) {
+    public AuthResponse(String token, String tokenType, long expiresIn, UserResponse user) {
+        this(token, tokenType, expiresIn, user, null);
+    }
 }

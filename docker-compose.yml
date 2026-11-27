@@ -50,6 +50,8 @@ services:
       APP_TOURNAMENT_GAMEPLAY_ENABLED: "true"
       POKER_ALLOWED_ORIGINS: ${PLAYER_ORIGIN:?Set PLAYER_ORIGIN}
       POKER_RUNTIME_NODE: ${POKER_RUNTIME_NODE:-staging-game-1}
+      OPERATIONS_API_URL: ${OPERATIONS_API_URL:-${OPERATIONS_BASE_URL:-https://operations.dpbossking.com}}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-${OPERATIONS_INTERNAL_KEY:-}}
       JDK_JAVA_OPTIONS: "-XX:MaxRAMPercentage=65"
     depends_on:
       mongo-bootstrap:

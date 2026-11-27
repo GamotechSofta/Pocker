@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertCircle, Clock3, Copy, Menu, Play, RotateCw, Trophy, Wifi } from 'lucide-react'
 import { http } from '@/api/http'
+import { fetchWalletBalance } from '@/api/wallet'
 import { fetchTournamentLeaderboard, type TournamentAssignment } from '@/api/tournaments'
 import { getTable, getTableState, getTournamentGame, leaveTable, startTable } from '@/api/tables'
 import { soundEngine } from '@/audio/soundEngine'
@@ -28,6 +29,7 @@ import { useProfileStore } from '@/royal/profileStore'
 import { SoundToggle } from '@/royal/SoundToggle'
 import { gameSocket } from '@/services/gameSocket'
 import { useGameStore } from '@/store/gameStore'
+import { useAuthStore } from '@/store/authStore'
 import { useLobbyStore } from '@/store/lobbyStore'
 import type { TableDetail } from '@/types/api'
 import type { GameActionRequest, PlayerView, TableState } from '@/types/game'
@@ -36,6 +38,7 @@ import { apiErrorMessage } from '@/utils/apiError'
 import { formatChipCount } from '@/utils/cards'
 import { hasHandResult, showdownFor, winnerIds } from '@/utils/results'
 import { displaySeatName, seatNameMap } from '@/utils/seats'
+import { exitOperatorGame, formatWalletAmount } from '@/utils/operatorLaunch'
 
 /** Matches the server's RESULT_HOLD_MS: the next hand deals when this runs out. */
 const RESULT_COUNTDOWN_SECONDS = 7
@@ -101,7 +104,10 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
   const setLastError = useGameStore((store) => store.setLastError)
   const setCurrentTable = useLobbyStore((store) => store.setCurrentTable)
   const upsertTable = useLobbyStore((store) => store.upsertTable)
-  const displayName = useProfileStore((store) => store.displayName)
+  const profileName = useProfileStore((store) => store.displayName)
+  const launch = useAuthStore(store => store.launch)
+  const walletBalance = useAuthStore(store => store.walletBalance)
+  const displayName = launch?.username ?? profileName
   const avatarId = useProfileStore((store) => store.avatarId)
 
   const [table, setTable] = useState<TableDetail | null>(null)
@@ -182,6 +188,7 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
         setTable(detail)
         if (!tournament) setCurrentTable(detail)
         setGameState(snapshot)
+        if (useAuthStore.getState().launch) void fetchWalletBalance().catch(() => undefined)
       } catch (cause: unknown) {
         if (alive.current) setLoadError(apiErrorMessage(cause))
       } finally {
@@ -417,6 +424,7 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
     soundEngine.play('click')
     stopAllSounds()
     if (tournament) {
+      if (launch) { exitOperatorGame(launch.closeUrl); return }
       navigate(paths.tournaments, { replace: true })
       return
     }
@@ -427,14 +435,19 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
         const detail = await leaveTable(gameId)
         upsertTable(detail)
       }
-    } catch {
-      // Leaving is best-effort: a stale seat or dropped socket must not trap the player at the table.
-    } finally {
-      setCurrentTable(null)
-      resetGame()
-      navigate(paths.home, { replace: true })
-      setBusy(false)
+    } catch (cause: unknown) {
+      if (launch) {
+        leaveRequested.current = false
+        setToast(apiErrorMessage(cause))
+        setBusy(false)
+        return
+      }
     }
+    setCurrentTable(null)
+    resetGame()
+    setBusy(false)
+    if (launch) exitOperatorGame(launch.closeUrl)
+    else navigate(paths.home, { replace: true })
   }
 
   async function onStartPrivateRoom() {
@@ -604,6 +617,7 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
                 </div>
               </div>
               <div className="board-hud-right">
+                {launch && <span aria-label="Wallet balance" style={{ color: '#fbbf24', fontSize: 12, whiteSpace: 'nowrap' }}>{walletBalance == null ? 'Wallet unavailable' : formatWalletAmount(walletBalance, launch)}</span>}
                 <FlipButton />
                 {clockSnapshot && <button type="button" className="board-hud-menu" aria-label="Blind Structure" title="Blind Structure"
                   onClick={() => setBlindStructureOpen(true)}><Clock3 size={16} /></button>}

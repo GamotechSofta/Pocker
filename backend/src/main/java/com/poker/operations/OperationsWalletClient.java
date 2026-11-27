@@ -10,7 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -18,6 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -35,8 +36,10 @@ public class OperationsWalletClient {
 
     public OperationsWalletClient(OperationsProperties properties) {
         this.properties = properties;
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(5));
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(10));
         this.client = RestClient.builder().requestFactory(factory).build();
     }
@@ -50,7 +53,7 @@ public class OperationsWalletClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("token", token);
         body.put("partner_code", partnerCode);
-        body.put("gid", gid);
+        body.put("gid", numericGid(gid));
         body.put("bet", bet);
         body.put("win", win);
         body.put("game_type", gameType);
@@ -58,6 +61,17 @@ public class OperationsWalletClient {
         body.put("ttype", transferType);
         body.put("roundid", roundId);
         return post("/api/v1/wallet/credit-transfer", body);
+    }
+
+    public static long numericGid(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("gid must be a positive integer.");
+        }
+        String trimmed = raw.trim();
+        if (!trimmed.matches("[1-9][0-9]{0,17}")) {
+            throw new IllegalArgumentException("gid must be a positive integer.");
+        }
+        return Long.parseLong(trimmed);
     }
 
     private BigDecimal post(String path, Map<String, ?> body) {
@@ -117,10 +131,17 @@ public class OperationsWalletClient {
         if (normalized.contains("insufficient") || normalized.contains("low balance") || normalized.contains("not enough")) {
             return new InsufficientBalanceException(upstreamMessage);
         }
+        if (normalized.contains("err-0004") || normalized.contains("unauthorized internal request")) {
+            return new ApiException(HttpStatus.BAD_GATEWAY, ErrorCodes.WALLET_UNAVAILABLE, upstreamMessage);
+        }
         if (status.value() == 401 || status.value() == 403 || status.value() == 404
-                || normalized.contains("err-0011") || normalized.contains("err-0004")
-                || normalized.contains("session token") || normalized.contains("unauthorized")) {
-            return new ApiException(HttpStatus.UNAUTHORIZED, ErrorCodes.UNAUTHORIZED, upstreamMessage);
+                || normalized.contains("err-0011") || normalized.contains("session token")
+                || normalized.contains("session expired") || normalized.contains("expired")
+                || normalized.contains("unauthorized")) {
+            return new ApiException(HttpStatus.UNAUTHORIZED, "OPERATOR_SESSION_EXPIRED", upstreamMessage);
+        }
+        if (status.value() == 400 || status.value() == 422) {
+            return new ApiException(HttpStatus.BAD_REQUEST, ErrorCodes.BAD_REQUEST, upstreamMessage);
         }
         return new ApiException(HttpStatus.BAD_GATEWAY, ErrorCodes.WALLET_UNAVAILABLE, upstreamMessage);
     }

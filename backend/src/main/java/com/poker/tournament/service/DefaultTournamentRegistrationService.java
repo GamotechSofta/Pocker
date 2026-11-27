@@ -102,7 +102,7 @@ public class DefaultTournamentRegistrationService implements TournamentRegistrat
             long count = count(tx, id);
             var ids = registered.stream().map(TournamentEntrant::getUserId).toList();
             var names = tx.find(Query.query(Criteria.where("id").in(ids)), User.class).stream()
-                    .collect(Collectors.toMap(User::getId, User::getUsername));
+                .collect(Collectors.toMap(User::getId, User::getDisplayName));
             var schedule = tx.findOne(Query.query(Criteria.where("tournamentId").is(id)), TournamentBlindSchedule.class);
             var now = Instant.now();
             var status = snapshot(event, entry.getStatus(), count, now);

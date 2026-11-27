@@ -1,4 +1,5 @@
 import { http } from '@/api/http'
+import { useAuthStore } from '@/store/authStore'
 
 export type WalletBalance = {
   playerId: string
@@ -10,6 +11,8 @@ export type WalletBalance = {
   currency: string
   addCashAmount?: number
   cashierUrl?: string | null
+  mode?: 'operator' | 'guest'
+  readOnly?: boolean
 }
 
 export type WalletTransaction = {
@@ -25,8 +28,12 @@ export type WalletTransaction = {
   metadata?: { operatorStatus?: string }
 }
 
-export function fetchWalletBalance(): Promise<WalletBalance> {
-  return http<WalletBalance>('/api/wallet/balance')
+export async function fetchWalletBalance(): Promise<WalletBalance> {
+  const token = useAuthStore.getState().token
+  const wallet = await http<WalletBalance>('/api/wallet/balance')
+  if (!Number.isFinite(wallet.balance)) throw new Error('Wallet returned an invalid balance.')
+  if (token === useAuthStore.getState().token) useAuthStore.getState().setWalletBalance(wallet.balance)
+  return wallet
 }
 
 export function fetchWalletTransactions(): Promise<WalletTransaction[]> {
@@ -34,6 +41,7 @@ export function fetchWalletTransactions(): Promise<WalletTransaction[]> {
 }
 
 export function addCash(amount?: number): Promise<{ balance: number }> {
+  if (useAuthStore.getState().launch) return Promise.reject(new Error('Manage funds through the operator lobby.'))
   return http<{ balance: number }>('/api/wallet/add-cash', {
     method: 'POST',
     body: JSON.stringify(amount != null ? { amount } : {}),

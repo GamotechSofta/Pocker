@@ -5,11 +5,14 @@ import com.poker.dto.LoginRequest;
 import com.poker.dto.RegisterRequest;
 import com.poker.dto.UserResponse;
 import com.poker.dto.GameLaunchRequest;
+import com.poker.dto.LaunchMetadata;
 import com.poker.entity.User;
 import com.poker.exception.EmailTakenException;
 import com.poker.exception.InvalidCredentialsException;
 import com.poker.exception.PlayerNotFoundException;
 import com.poker.exception.UsernameTakenException;
+import com.poker.exception.ApiException;
+import com.poker.exception.ErrorCodes;
 import com.poker.mapper.UserMapper;
 import com.poker.repository.UserRepository;
 import com.poker.security.JwtService;
@@ -18,12 +21,16 @@ import com.poker.operations.OperatorSession;
 import com.poker.operations.OperatorSessionRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
 
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.math.BigDecimal;
+import java.net.URI;
 
 @Service
 public class AuthService {
@@ -98,13 +105,93 @@ public class AuthService {
 
     /** Verifies the launch token through Operations before minting our short-lived game JWT. */
     public AuthResponse launch(GameLaunchRequest request) {
-        operationsWallet.balance(request.token().trim(), request.partnerCode().trim());
-        String identity = "op_" + digest(request.partnerCode() + ":" + (request.userId() == null ? request.token() : request.userId()));
-        User user = userRepository.findByUsernameIgnoreCase(identity).orElseGet(() ->
-                userRepository.save(new User(identity, identity + "@operator.local", passwordEncoder.encode(UUID.randomUUID().toString()))));
-        operatorSessions.findByPlayerId(user.getId().toString()).ifPresent(operatorSessions::delete);
-        operatorSessions.save(new OperatorSession(user.getId().toString(), request.token().trim(), request.partnerCode().trim(), request.gid().trim(), request.closeUrl()));
-        return toAuthResponse(user);
+        GameLaunchRequest launch = normalizedLaunch(request);
+        String identity = "op_" + digest(launch.partnerCode() + "\n" + launch.token() + "\n" + launch.gid());
+        UUID playerId = UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8));
+        OperatorSession existing = operatorSessions.findByPlayerId(playerId.toString()).orElse(null);
+        if (existing != null && existing.isWageringBlocked()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "OPERATOR_SESSION_EXPIRED",
+                    "This game session has ended. Return to your operator lobby.");
+        }
+        BigDecimal balance = operationsWallet.balance(launch.token(), launch.partnerCode());
+        User user = findOrCreateOperatorUser(playerId, identity, launch.username());
+        OperatorSession session = existing;
+        if (session == null) {
+            OperatorSession candidate = new OperatorSession(playerId.toString(), launch.token(), launch.partnerCode(),
+                    launch.gid(), launch.gameCode(), launch.username(), launch.userId(), launch.currency(),
+                    launch.lang(), launch.extsess(), launch.closeUrl());
+            try {
+                session = operatorSessions.insert(candidate);
+            } catch (DuplicateKeyException concurrentLaunch) {
+                session = operatorSessions.findByPlayerId(playerId.toString()).orElseThrow(() -> concurrentLaunch);
+            }
+        }
+        if (session.isWageringBlocked()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "OPERATOR_SESSION_EXPIRED",
+                    "This game session has ended. Return to your operator lobby.");
+        }
+        return new AuthResponse(jwtService.createToken(user), "Bearer", jwtService.getExpiresInSeconds(),
+                UserMapper.toResponse(user), LaunchMetadata.from(session, balance));
+    }
+
+    private User findOrCreateOperatorUser(UUID id, String identity, String displayName) {
+        Optional<User> existing = userRepository.findById(id);
+        if (existing.isPresent()) return existing.get();
+        User candidate = new User(id, identity, identity + "@operator.local",
+                passwordEncoder.encode(UUID.randomUUID().toString()));
+        candidate.setDisplayName(displayName);
+        try {
+            return userRepository.insert(candidate);
+        } catch (DuplicateKeyException concurrentLaunch) {
+            return userRepository.findById(id).orElseThrow(() -> concurrentLaunch);
+        }
+    }
+
+    private static GameLaunchRequest normalizedLaunch(GameLaunchRequest request) {
+        if (request == null) throw invalidLaunch("Launch request is required.");
+        String token = launchValue(request.token(), "token", 2048, true);
+        String partner = launchValue(request.partnerCode(), "partner_code", 128, true).toUpperCase(Locale.ROOT);
+        String gid = launchValue(request.gid(), "gid", 18, true);
+        if (!gid.matches("[1-9][0-9]{0,17}")) throw invalidLaunch("gid must be a positive integer.");
+        String gameCode = launchValue(request.gameCode(), "game_code", 128, true);
+        String username = launchValue(request.username(), "username", 128, true);
+        String userId = launchValue(request.userId(), "user_id", 256, false);
+        String currency = launchValue(request.currency(), "currency", 3, false);
+        currency = currency == null ? "INR" : currency.toUpperCase(Locale.ROOT);
+        if (!currency.matches("[A-Z]{3}")) throw invalidLaunch("currency must be a three-letter ISO code.");
+        String lang = launchValue(request.lang(), "lang", 35, false);
+        lang = lang == null ? "en" : lang.toLowerCase(Locale.ROOT);
+        if (!lang.matches("[a-z]{2,8}(-[a-z0-9]{1,8})*")) throw invalidLaunch("lang must be a language tag.");
+        String extsess = launchValue(request.extsess(), "extsess", 512, false);
+        String closeUrl = launchValue(request.closeUrl(), "close_url", 2048, false);
+        if (closeUrl != null) {
+            try {
+                URI uri = URI.create(closeUrl);
+                if (!("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme()))
+                        || uri.getHost() == null || uri.getRawUserInfo() != null) {
+                    throw invalidLaunch("close_url must be an absolute HTTP(S) lobby URL without credentials.");
+                }
+            } catch (IllegalArgumentException invalidUri) {
+                throw invalidLaunch("close_url must be a valid HTTP(S) lobby URL.");
+            }
+        }
+        return new GameLaunchRequest(token, partner, gid, gameCode, username, userId, currency, lang, extsess, closeUrl);
+    }
+
+    private static String launchValue(String raw, String field, int maxLength, boolean required) {
+        String value = raw == null ? null : raw.trim();
+        if (value == null || value.isEmpty()) {
+            if (required) throw invalidLaunch(field + " is required.");
+            return null;
+        }
+        if (value.length() > maxLength || value.chars().anyMatch(Character::isISOControl)) {
+            throw invalidLaunch(field + " is invalid.");
+        }
+        return value;
+    }
+
+    private static ApiException invalidLaunch(String message) {
+        return new ApiException(HttpStatus.BAD_REQUEST, ErrorCodes.VALIDATION_ERROR, message);
     }
 
     public UserResponse me(UUID userId) {
@@ -141,7 +228,7 @@ public class AuthService {
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
             StringBuilder result = new StringBuilder();
-            for (int i = 0; i < 12; i++) result.append(String.format("%02x", bytes[i]));
+            for (byte valueByte : bytes) result.append(String.format("%02x", valueByte));
             return result.toString();
         } catch (Exception error) {
             throw new IllegalStateException("Could not derive operator identity", error);

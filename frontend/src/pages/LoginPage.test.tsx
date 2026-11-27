@@ -4,10 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { appRouteObjects } from '@/routes/appRouteObjects'
 import { useAuthStore } from '@/store/authStore'
 
-vi.mock('@/api/auth', () => ({
-  login: vi.fn(),
-  register: vi.fn(),
-  createGuestSession: vi.fn().mockResolvedValue({
+vi.mock('@/api/auth', () => {
+  const session = {
     token: 'guest-jwt',
     tokenType: 'Bearer',
     expiresIn: 86_400,
@@ -17,9 +15,18 @@ vi.mock('@/api/auth', () => ({
       email: 'g_guest@guest.local',
       createdAt: '2026-01-01T00:00:00Z',
     },
-  }),
-  fetchCurrentUser: vi.fn(),
-}))
+  }
+  return {
+    login: vi.fn(),
+    register: vi.fn(),
+    createGuestSession: vi.fn().mockResolvedValue(session),
+    ensureGuestSession: vi.fn().mockImplementation(async () => {
+      useAuthStore.getState().setSession(session)
+      return session
+    }),
+    fetchCurrentUser: vi.fn(),
+  }
+})
 
 vi.mock('@/api/tables', () => ({
   listTables: vi.fn().mockResolvedValue([]),

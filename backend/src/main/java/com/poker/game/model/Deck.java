@@ -70,6 +70,8 @@ public class Deck {
         return cards.size();
     }
 
+    public List<Card> snapshotCards() { return List.copyOf(cards); }
+
     public void reset() {
         cards.clear();
         for (Suit suit : Suit.values()) {

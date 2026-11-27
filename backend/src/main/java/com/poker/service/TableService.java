@@ -10,11 +10,15 @@ import com.poker.dto.TableStateResponse;
 import com.poker.dto.TableSummaryResponse;
 import com.poker.entity.PokerTable;
 import com.poker.entity.PokerTablePlayer;
+import com.poker.entity.TableStatus;
 import com.poker.entity.User;
+import com.poker.exception.ApiException;
+import com.poker.exception.ErrorCodes;
 import com.poker.exception.GameNotFoundException;
 import com.poker.exception.InvalidGameActionException;
 import com.poker.exception.PlayerNotFoundException;
 import com.poker.game.engine.ActionType;
+import com.poker.game.engine.GameActionException;
 import com.poker.game.engine.GameState;
 import com.poker.game.engine.GameStatus;
 import com.poker.game.engine.LegalActions;
@@ -36,6 +40,7 @@ import com.poker.websocket.WsEventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -230,9 +235,40 @@ public class TableService {
             }
 
             boolean bot = BotService.isBot(user);
-            String escrowId = request != null ? request.prepaidEscrowId() : null;
+            TexasHoldemEngine engine = engineFor(table);
             if (!bot) {
-                if (escrowId == null || escrowId.isBlank()) {
+                assertCanWager(userId);
+                if (engine.state().isHandInProgress() || engine.state().isBettingActive()
+                        || engine.state().getStatus() == GameStatus.PAYOUT) {
+                    throw GameActionException.alreadyStarted();
+                }
+                if (table.getPlayers().size() >= table.getMaxPlayers()) {
+                    throw GameActionException.seatUnavailable();
+                }
+                if (request != null && request.seat() != null) {
+                    int seat = request.seat();
+                    if (seat < 0 || seat >= table.getMaxPlayers() || engine.state().playerAt(seat) != null) {
+                        throw GameActionException.seatUnavailable();
+                    }
+                }
+            }
+
+            if (otherTableId.isPresent() && !otherTableId.get().equals(tableId)) {
+                try {
+                    leaveTable(otherTableId.get(), userId);
+                } catch (ApiException ex) {
+                    if (ErrorCodes.WALLET_UNAVAILABLE.equals(ex.getCode())
+                            || "OPERATOR_SESSION_EXPIRED".equals(ex.getCode())) {
+                        throw ex;
+                    }
+                } catch (RuntimeException ignored) {
+                }
+            }
+
+            String escrowId = request != null ? request.prepaidEscrowId() : null;
+            boolean reservedHere = !bot && (escrowId == null || escrowId.isBlank());
+            if (!bot) {
+                if (reservedHere) {
                     escrowId = stakeEscrowService.reserveEntry(
                             userId.toString(),
                             table.getStartingChips(),
@@ -243,17 +279,33 @@ public class TableService {
                 seatEscrows.put(seatKey(tableId, userId), escrowId);
             }
 
-            TexasHoldemEngine engine = engineFor(table);
-            if (request != null && request.seat() != null) {
-                engine.sitPlayer(userId.toString(), user.getUsername(), request.seat(), table.getStartingChips());
-            } else {
-                engine.sitPlayer(userId.toString(), user.getUsername());
-            }
+            TexasHoldemEngine.Snapshot beforeSit = engine.snapshot();
+            List<PokerTablePlayer> playersBeforeSit = table.snapshotPlayers();
+            TableStatus statusBeforeSit = table.getStatus();
+            try {
+                if (request != null && request.seat() != null) {
+                    engine.sitPlayer(userId.toString(), user.getDisplayName(), request.seat(), table.getStartingChips());
+                } else {
+                    engine.sitPlayer(userId.toString(), user.getDisplayName());
+                }
 
-            PlayerState seated = engine.state().player(userId.toString());
-            PokerTablePlayer seatedPlayer = new PokerTablePlayer(user, seated.getSeat(), seated.getChipStack(), escrowId);
-            table.addPlayer(seatedPlayer);
-            tableRepository.save(table);
+                PlayerState seated = engine.state().player(userId.toString());
+                PokerTablePlayer seatedPlayer = new PokerTablePlayer(user, seated.getSeat(), seated.getChipStack(), escrowId);
+                table.addPlayer(seatedPlayer);
+                tableRepository.save(table);
+            } catch (RuntimeException ex) {
+                engines.put(tableId, TexasHoldemEngine.restore(beforeSit));
+                table.restoreSnapshot(statusBeforeSit, playersBeforeSit);
+                seatEscrows.remove(seatKey(tableId, userId));
+                if (reservedHere && escrowId != null) {
+                    try {
+                        stakeEscrowService.refundStake(escrowId, "Join failed, entry returned");
+                    } catch (RuntimeException refundEx) {
+                        log.warn("Refund after failed join {} failed: {}", escrowId, refundEx.getMessage());
+                    }
+                }
+                throw ex;
+            }
 
             // Private rooms: when the selected max seats are full, deal automatically.
             // Host can still start earlier once the poker minimum (2) is seated.
@@ -262,15 +314,26 @@ public class TableService {
                     && engine.state().getHandNumber() == 0
                     && (engine.state().getStatus() == GameStatus.WAITING
                         || engine.state().getStatus() == GameStatus.NEXT_HAND)) {
-                removeDepartedEnginePlayers(table, engine);
-                fundRebuys(table, engine);
-                if (engine.state().getPlayers().size() >= 2) {
-                    engine.startHand();
-                    syncStatusAndStacks(table, engine);
-                    tableRepository.save(table);
-                    publish(tableId, WsEventType.PLAYER_JOINED);
-                    publish(tableId, WsEventType.HAND_STARTED);
-                    return TableMapper.toDetail(requireTable(tableId));
+                TexasHoldemEngine.Snapshot beforeAutoStart = engine.snapshot();
+                List<PokerTablePlayer> playersBeforeAutoStart = table.snapshotPlayers();
+                TableStatus statusBeforeAutoStart = table.getStatus();
+                try {
+                    removeDepartedEnginePlayers(table, engine);
+                    if (evictExpiredOperatorPlayers(table, engine)) {
+                        fundRebuys(table, engine);
+                        if (engine.state().getPlayers().size() >= 2) {
+                            engine.startHand();
+                            syncStatusAndStacks(table, engine);
+                            tableRepository.save(table);
+                            publish(tableId, WsEventType.PLAYER_JOINED);
+                            publish(tableId, WsEventType.HAND_STARTED);
+                            return TableMapper.toDetail(requireTable(tableId));
+                        }
+                    }
+                } catch (RuntimeException ex) {
+                    engines.put(tableId, TexasHoldemEngine.restore(beforeAutoStart));
+                    table.restoreSnapshot(statusBeforeAutoStart, playersBeforeAutoStart);
+                    log.warn("Private room auto-start held at {} pending wallet confirmation: {}", tableId, ex.getMessage());
                 }
             }
 
@@ -286,16 +349,32 @@ public class TableService {
             PokerTablePlayer seated = findSeated(table, userId)
                     .orElseThrow(() -> new InvalidGameActionException("You are not seated at this table."));
             TexasHoldemEngine engine = engineFor(table);
-            PlayerState live = engine.state().player(userId.toString());
-            int cashOut = live != null ? live.getChipStack() : seated.getChipStack();
-            engine.abandonSeat(userId.toString());
-            table.removePlayer(seated);
-            settleSeatWallet(tableId, userId, cashOut, BotService.isBot(seated), seated.getEscrowId());
-            syncStatusAndStacks(table, engine);
-            tableRepository.save(table);
-            TableDetailResponse detail = TableMapper.toDetail(requireTable(tableId));
-            publish(tableId, WsEventType.PLAYER_LEFT);
-            return detail;
+            TexasHoldemEngine.Snapshot engineBefore = engine.snapshot();
+            List<PokerTablePlayer> playersBefore = table.snapshotPlayers();
+            TableStatus statusBefore = table.getStatus();
+            String seatEscrowKey = seatKey(tableId, userId);
+            String trackedEscrowBefore = seatEscrows.get(seatEscrowKey);
+
+            try {
+                PlayerState live = engine.state().player(userId.toString());
+                int cashOut = live != null ? live.getChipStack() : seated.getChipStack();
+                engine.abandonSeat(userId.toString());
+                table.removePlayer(seated);
+                String cashOutTranId = "CASHOUT_" + tableId + "_" + seated.getId();
+                settleSeatWallet(tableId, userId, cashOut, BotService.isBot(seated), seated.getEscrowId(), cashOutTranId);
+                syncStatusAndStacks(table, engine);
+                tableRepository.save(table);
+                TableDetailResponse detail = TableMapper.toDetail(requireTable(tableId));
+                publish(tableId, WsEventType.PLAYER_LEFT);
+                return detail;
+            } catch (RuntimeException ex) {
+                engines.put(tableId, TexasHoldemEngine.restore(engineBefore));
+                table.restoreSnapshot(statusBefore, playersBefore);
+                if (trackedEscrowBefore != null) {
+                    seatEscrows.put(seatEscrowKey, trackedEscrowBefore);
+                }
+                throw ex;
+            }
         }
     }
 
@@ -305,23 +384,37 @@ public class TableService {
             if (findSeated(table, userId).isEmpty()) {
                 throw new InvalidGameActionException("You must be seated to start the table.");
             }
+            assertCanWager(userId);
             TexasHoldemEngine engine = engineFor(table);
-            removeDepartedEnginePlayers(table, engine);
-            fundRebuys(table, engine);
-            if (table.isPrivateRoom()) {
-                if (!userId.equals(table.getCreatedById())) {
-                    throw new InvalidGameActionException("Only the host can start this room.");
+            TexasHoldemEngine.Snapshot engineBefore = engine.snapshot();
+            List<PokerTablePlayer> playersBefore = table.snapshotPlayers();
+            TableStatus statusBefore = table.getStatus();
+            try {
+                removeDepartedEnginePlayers(table, engine);
+                if (!evictExpiredOperatorPlayers(table, engine)) {
+                    throw new ApiException(HttpStatus.UNAUTHORIZED, "OPERATOR_SESSION_EXPIRED",
+                            "A seated operator session has expired and cannot wager.");
                 }
-                if (engine.state().getPlayers().size() < 2) {
-                    throw new InvalidGameActionException("Need at least 2 players to start.");
+                fundRebuys(table, engine);
+                if (table.isPrivateRoom()) {
+                    if (!userId.equals(table.getCreatedById())) {
+                        throw new InvalidGameActionException("Only the host can start this room.");
+                    }
+                    if (engine.state().getPlayers().size() < 2) {
+                        throw new InvalidGameActionException("Need at least 2 players to start.");
+                    }
                 }
+                engine.startHand();
+                syncStatusAndStacks(table, engine);
+                tableRepository.save(table);
+                TableStateResponse state = TableMapper.toSanitizedState(table, engine, userId, syncTurnTimer(table, engine));
+                publish(tableId, WsEventType.HAND_STARTED);
+                return state;
+            } catch (RuntimeException ex) {
+                engines.put(tableId, TexasHoldemEngine.restore(engineBefore));
+                table.restoreSnapshot(statusBefore, playersBefore);
+                throw ex;
             }
-            engine.startHand();
-            syncStatusAndStacks(table, engine);
-            tableRepository.save(table);
-            TableStateResponse state = TableMapper.toSanitizedState(table, engine, userId, syncTurnTimer(table, engine));
-            publish(tableId, WsEventType.HAND_STARTED);
-            return state;
         }
     }
 
@@ -336,15 +429,24 @@ public class TableService {
             if (status != GameStatus.WAITING && status != GameStatus.NEXT_HAND) {
                 return false;
             }
-            removeDepartedEnginePlayers(table, engine);
-            fundRebuys(table, engine);
-            if (engine.state().getPlayers().size() < 2) {
-                engine.state().setStatus(GameStatus.WAITING);
-                syncStatusAndStacks(table, engine);
-                tableRepository.save(table);
-                return false;
-            }
+            TexasHoldemEngine.Snapshot engineBefore = engine.snapshot();
+            List<PokerTablePlayer> playersBefore = table.snapshotPlayers();
+            TableStatus statusBefore = table.getStatus();
             try {
+                removeDepartedEnginePlayers(table, engine);
+                if (!evictExpiredOperatorPlayers(table, engine)) {
+                    engine.state().setStatus(GameStatus.WAITING);
+                    syncStatusAndStacks(table, engine);
+                    tableRepository.save(table);
+                    return false;
+                }
+                fundRebuys(table, engine);
+                if (engine.state().getPlayers().size() < 2) {
+                    engine.state().setStatus(GameStatus.WAITING);
+                    syncStatusAndStacks(table, engine);
+                    tableRepository.save(table);
+                    return false;
+                }
                 engine.startHand();
                 syncStatusAndStacks(table, engine);
                 tableRepository.save(table);
@@ -352,10 +454,42 @@ public class TableService {
                 publish(tableId, WsEventType.HAND_STARTED);
                 return true;
             } catch (RuntimeException ex) {
-                log.debug("Auto-start next hand skipped for {}: {}", tableId, ex.getMessage());
+                engines.put(tableId, TexasHoldemEngine.restore(engineBefore));
+                table.restoreSnapshot(statusBefore, playersBefore);
+                log.debug("Auto-start next hand held for {}: {}", tableId, ex.getMessage());
                 return false;
             }
         }
+    }
+
+    /** Removes expired-session players before dealing; returns false if any expired player with chips could not cash out. */
+    private boolean evictExpiredOperatorPlayers(PokerTable table, TexasHoldemEngine engine) {
+        List<PokerTablePlayer> blocked = new ArrayList<>();
+        for (PokerTablePlayer seated : table.getPlayers()) {
+            if (!BotService.isBot(seated) && walletService.isOperatorWageringBlocked(seated.getUserId().toString())) {
+                blocked.add(seated);
+            }
+        }
+        boolean allCleared = true;
+        for (PokerTablePlayer seated : blocked) {
+            PlayerState live = engine.state().player(seated.getUserId().toString());
+            int cashOut = live != null ? live.getChipStack() : seated.getChipStack();
+            String cashOutTranId = "CASHOUT_" + table.getId() + "_" + seated.getId();
+            try {
+                if (cashOut > 0) {
+                    settleSeatWallet(table.getId(), seated.getUserId(), cashOut, false, seated.getEscrowId(), cashOutTranId);
+                } else {
+                    settleSeatWallet(table.getId(), seated.getUserId(), 0, false, seated.getEscrowId(), cashOutTranId);
+                }
+                engine.abandonSeat(seated.getUserId().toString());
+                table.removePlayer(seated);
+                publish(table.getId(), WsEventType.PLAYER_LEFT);
+            } catch (RuntimeException ex) {
+                log.warn("Expired operator player {} could not be cashed out yet at {}: {}", seated.getUsername(), table.getId(), ex.getMessage());
+                allCleared = false;
+            }
+        }
+        return allCleared;
     }
 
     private void fundRebuys(PokerTable table, TexasHoldemEngine engine) {
@@ -370,11 +504,13 @@ public class TableService {
                 engine.rebuy(seated.getUserId().toString(), buyIn, live.getUsername() + " received a house rebuy");
                 continue;
             }
+            String rebuyTranId = "REBUY_" + table.getId() + "_" + seated.getUserId() + "_" + engine.state().getHandNumber();
             try {
                 String escrowId = stakeEscrowService.reserveRebuy(
                         seated.getUserId().toString(),
                         buyIn,
-                        table.getId().toString()
+                        table.getId().toString(),
+                        rebuyTranId
                 );
                 stakeEscrowService.assignToTable(escrowId, table.getId().toString(), null);
                 seatEscrows.put(seatKey(table.getId(), seated.getUserId()), escrowId);
@@ -383,39 +519,42 @@ public class TableService {
             } catch (InsufficientBalanceException ex) {
                 log.info("Player {} cannot rebuy at {}: {}", seated.getUsername(), table.getId(), ex.getMessage());
                 toRemove.add(seated);
+            } catch (ApiException ex) {
+                if ("OPERATOR_SESSION_EXPIRED".equals(ex.getCode())) {
+                    log.info("Removing player {} from {} after expired session rebuy rejection", seated.getUsername(), table.getId());
+                    toRemove.add(seated);
+                } else {
+                    throw ex;
+                }
             }
         }
         for (PokerTablePlayer seated : toRemove) {
             int cashOut = 0;
             engine.abandonSeat(seated.getUserId().toString());
             table.removePlayer(seated);
-            settleSeatWallet(table.getId(), seated.getUserId(), cashOut, false, seated.getEscrowId());
+            settleSeatWallet(table.getId(), seated.getUserId(), cashOut, false, seated.getEscrowId(), "CASHOUT_" + table.getId() + "_" + seated.getId());
             publish(table.getId(), WsEventType.PLAYER_LEFT);
         }
     }
 
-    private void settleSeatWallet(UUID tableId, UUID userId, int cashOutChips, boolean bot, String knownEscrowId) {
-        seatEscrows.remove(seatKey(tableId, userId));
+    private void settleSeatWallet(UUID tableId, UUID userId, int cashOutChips, boolean bot, String knownEscrowId, String cashOutTranId) {
         if (bot) {
+            seatEscrows.remove(seatKey(tableId, userId));
             return;
         }
         if (cashOutChips > 0) {
-            String cashKey = "CASHOUT_" + tableId + "_" + userId + "_" + cashOutChips + "_" + System.currentTimeMillis();
-            try {
-                walletService.credit(
-                        userId.toString(),
-                        BigDecimal.valueOf(cashOutChips),
-                        WalletService.TX_TABLE_CASH_OUT,
-                        cashKey,
-                        tableId.toString(),
-                        "Table cash-out",
-                        Map.of("tableId", tableId.toString(), "chips", cashOutChips)
-                );
-            } catch (RuntimeException ex) {
-                log.error("Cash-out failed for {} at {}: {}", userId, tableId, ex.getMessage());
-            }
+            walletService.credit(
+                    userId.toString(),
+                    BigDecimal.valueOf(cashOutChips),
+                    WalletService.TX_TABLE_CASH_OUT,
+                    cashOutTranId,
+                    tableId.toString(),
+                    "Table cash-out",
+                    Map.of("tableId", tableId.toString(), "chips", cashOutChips)
+            );
         }
-        // Close every OPEN escrow for this seat (buy-in + rebuys). DB-backed so restarts still settle.
+        seatEscrows.remove(seatKey(tableId, userId));
+        // Close every OPEN escrow for this seat (buy-in + rebuys) only after wallet confirmation.
         for (var escrow : stakeEscrowService.findOpenForPlayer(userId.toString())) {
             boolean sameTable = tableId.toString().equals(escrow.getTableId());
             boolean known = knownEscrowId != null && knownEscrowId.equals(escrow.getId());
@@ -562,9 +701,19 @@ public class TableService {
     public TableStateResponse applyAction(UUID tableId, UUID userId, GameActionRequest request) {
         synchronized (lockFor(tableId)) {
             PokerTable table = requireTable(tableId);
-            requireUser(userId);
+            User actor = requireUser(userId);
             if (findSeated(table, userId).isEmpty()) {
                 throw new InvalidGameActionException("You must be seated to act.");
+            }
+            PlayerAction action = toPlayerAction(userId, request);
+            if (!BotService.isBot(actor)) {
+                if (walletService.isOperatorWageringBlocked(userId.toString()) && action.type() != ActionType.FOLD) {
+                    throw new ApiException(HttpStatus.UNAUTHORIZED, "OPERATOR_SESSION_EXPIRED",
+                            "This game session has ended. Return to your operator lobby.");
+                }
+                if (isWageringAction(action.type()) && walletService.hasPendingOperatorTransfer(userId.toString())) {
+                    walletService.recoverPendingOperatorTransfers(userId.toString());
+                }
             }
             String requestKey = null;
             if (request.requestId() != null && !request.requestId().isBlank()) {
@@ -575,18 +724,43 @@ public class TableService {
                 }
             }
             TexasHoldemEngine engine = engineFor(table);
+            TexasHoldemEngine.Snapshot engineBefore = engine.snapshot();
+            List<PokerTablePlayer> playersBefore = table.snapshotPlayers();
+            TableStatus statusBefore = table.getStatus();
             GameStatus before = engine.state().getStatus();
             int communityBefore = engine.state().getCommunityCards().size();
-            engine.apply(toPlayerAction(userId, request));
+            try {
+                engine.apply(action);
+                syncStatusAndStacks(table, engine);
+                tableRepository.save(table);
+            } catch (RuntimeException ex) {
+                engines.put(tableId, TexasHoldemEngine.restore(engineBefore));
+                table.restoreSnapshot(statusBefore, playersBefore);
+                throw ex;
+            }
             if (requestKey != null) {
                 rememberRequestId(requestKey);
             }
-            syncStatusAndStacks(table, engine);
-            tableRepository.save(table);
             TableStateResponse state = TableMapper.toSanitizedState(table, engine, userId, syncTurnTimer(table, engine));
             publish(tableId, eventAfterAction(before, engine, communityBefore));
             return state;
         }
+    }
+
+    private void assertCanWager(UUID userId) {
+        String playerId = userId.toString();
+        if (walletService.isOperatorWageringBlocked(playerId)) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "OPERATOR_SESSION_EXPIRED",
+                    "This game session has ended. Return to your operator lobby.");
+        }
+        if (walletService.hasPendingOperatorTransfer(playerId)) {
+            walletService.recoverPendingOperatorTransfers(playerId);
+        }
+    }
+
+    private static boolean isWageringAction(ActionType type) {
+        return type == ActionType.BET || type == ActionType.RAISE
+                || type == ActionType.CALL || type == ActionType.ALL_IN;
     }
 
     private void rememberRequestId(String key) {

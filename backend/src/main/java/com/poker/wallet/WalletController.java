@@ -1,9 +1,14 @@
 package com.poker.wallet;
 
 import com.poker.config.WalletProperties;
+import com.poker.exception.ApiException;
+import com.poker.exception.ErrorCodes;
+import com.poker.operations.OperatorSession;
+import com.poker.operations.OperatorSessionRepository;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,24 +35,32 @@ public class WalletController {
     private final WalletService walletService;
     private final WalletProperties walletProperties;
 
-    public WalletController(WalletService walletService, WalletProperties walletProperties) {
+    private final OperatorSessionRepository operatorSessions;
+
+    public WalletController(WalletService walletService, WalletProperties walletProperties,
+                            OperatorSessionRepository operatorSessions) {
         this.walletService = walletService;
         this.walletProperties = walletProperties;
+        this.operatorSessions = operatorSessions;
     }
 
     @GetMapping("/balance")
     public ResponseEntity<Map<String, Object>> getBalance(@AuthenticationPrincipal Jwt jwt) {
         String owner = jwt.getSubject();
+        OperatorSession operator = operatorSessions.findByPlayerId(owner).orElse(null);
+        BigDecimal balance = walletService.balanceOf(owner);
         WalletAccount account = walletService.getOrCreateWallet(owner);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("playerId", owner);
-        body.put("balance", walletService.balanceOf(owner));
+        body.put("balance", balance);
         body.put("depositBalance", account.getDepositBalance());
         body.put("winningsBalance", account.getWinningsBalance());
         body.put("bonusBalance", account.getBonusBalance());
         body.put("withdrawableBalance", account.getWinningsBalance());
-        body.put("currency", WalletAccount.CURRENCY);
-        body.put("addCashAmount", walletProperties.getAddCashAmount());
+        body.put("currency", operator == null ? WalletAccount.CURRENCY : operator.getCurrency());
+        body.put("mode", operator == null ? "guest" : "operator");
+        body.put("readOnly", operator != null);
+        body.put("addCashAmount", operator == null ? walletProperties.getAddCashAmount() : 0L);
         body.put("cashierUrl", null);
         return ResponseEntity.ok(body);
     }
@@ -62,9 +75,23 @@ public class WalletController {
             @AuthenticationPrincipal Jwt jwt,
             @RequestBody(required = false) Map<String, Object> body
     ) {
+        if (operatorSessions.findByPlayerId(jwt.getSubject()).isPresent()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCodes.FORBIDDEN,
+                    "Operator balances can only be funded through the operator cashier.");
+        }
         long amount = walletProperties.getAddCashAmount();
         if (body != null && body.get("amount") != null) {
-            amount = ((Number) body.get("amount")).longValue();
+            try {
+                if (!(body.get("amount") instanceof Number)) throw new NumberFormatException();
+                amount = new BigDecimal(body.get("amount").toString()).longValueExact();
+            } catch (ArithmeticException | NumberFormatException invalidAmount) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCodes.BAD_REQUEST,
+                        "Add Cash amount must be a positive whole number.");
+            }
+        }
+        if (amount <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, ErrorCodes.BAD_REQUEST,
+                    "Add Cash amount must be a positive whole number.");
         }
         WalletTransaction tx = walletService.addCash(jwt.getSubject(), amount);
         Map<String, Object> response = new LinkedHashMap<>();

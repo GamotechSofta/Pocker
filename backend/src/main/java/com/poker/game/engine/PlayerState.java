@@ -7,6 +7,22 @@ import java.util.List;
 import java.util.Objects;
 
 public final class PlayerState {
+    public record Snapshot(String playerId, String username, int seat, int chipStack, List<Card> holeCards,
+                           int betThisRound, int handContribution, boolean folded, boolean allIn,
+                           boolean actedThisRound, boolean raiseAllowed, boolean connected, boolean drawCompleted) {
+        public Snapshot { holeCards = List.copyOf(holeCards); }
+    }
+    public Snapshot snapshot() {
+        return new Snapshot(playerId, username, seat, chipStack, holeCards, betThisRound, handContribution,
+                folded, allIn, actedThisRound, raiseAllowed, connected, drawCompleted);
+    }
+    public static PlayerState restore(Snapshot s) {
+        PlayerState p = new PlayerState(s.playerId(), s.username(), s.seat(), s.chipStack());
+        p.holeCards.addAll(s.holeCards()); p.betThisRound = s.betThisRound(); p.handContribution = s.handContribution();
+        p.folded = s.folded(); p.allIn = s.allIn(); p.actedThisRound = s.actedThisRound();
+        p.raiseAllowed = s.raiseAllowed(); p.connected = s.connected(); p.drawCompleted = s.drawCompleted();
+        return p;
+    }
 
     private final String playerId;
     private final String username;

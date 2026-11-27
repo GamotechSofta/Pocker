@@ -22,11 +22,11 @@ public class PokerTablePlayer {
     }
 
     public PokerTablePlayer(User user, int seat, int chipStack, String escrowId) {
-        this(user.getId(), user.getUsername(), user.getEmail(), seat, chipStack, escrowId);
+        this(user.getId(), user.getDisplayName(), user.getEmail(), seat, chipStack, escrowId);
     }
 
     public static PokerTablePlayer tournamentSeat(User user, int seat, int stack) {
-        return new PokerTablePlayer(user.getId(), user.getUsername(), null, seat, stack, null);
+        return new PokerTablePlayer(user.getId(), user.getDisplayName(), null, seat, stack, null);
     }
 
     public PokerTablePlayer transferTournamentSeat(int destination) {
@@ -42,6 +42,18 @@ public class PokerTablePlayer {
         this.seat = seat;
         this.chipStack = chipStack;
         this.escrowId = escrowId;
+    }
+
+    public PokerTablePlayer copy() {
+        PokerTablePlayer cloned = new PokerTablePlayer();
+        cloned.id = this.id;
+        cloned.userId = this.userId;
+        cloned.username = this.username;
+        cloned.email = this.email;
+        cloned.seat = this.seat;
+        cloned.chipStack = this.chipStack;
+        cloned.escrowId = this.escrowId;
+        return cloned;
     }
 
     public UUID getId() {

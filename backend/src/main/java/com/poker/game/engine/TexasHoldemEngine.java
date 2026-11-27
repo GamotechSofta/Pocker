@@ -17,6 +17,20 @@ import java.util.Random;
 import java.util.Set;
 
 public class TexasHoldemEngine {
+    public record Snapshot(GameState.Snapshot state, List<Card> remainingDeck) {
+        public Snapshot {
+            Objects.requireNonNull(state, "state is required");
+            remainingDeck = remainingDeck == null ? null : List.copyOf(remainingDeck);
+        }
+    }
+    public Snapshot snapshot() { return new Snapshot(state.snapshot(), deck == null ? null : deck.snapshotCards()); }
+    public static TexasHoldemEngine restore(Snapshot s) {
+        GameState.Snapshot saved = s.state();
+        TexasHoldemEngine engine = new TexasHoldemEngine(saved.gameId(), saved.tableConfig(), com.poker.game.variants.Variants.create(saved.variant()), new SecureRandom());
+        engine.state.restoreFrom(saved); engine.deck = s.remainingDeck() == null ? null : Deck.ofCards(s.remainingDeck());
+        return engine;
+    }
+    public TexasHoldemEngine copy() { return restore(snapshot()); }
 
     private final TableConfig config;
     private final PokerVariant variant;

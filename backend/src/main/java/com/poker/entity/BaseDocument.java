@@ -18,6 +18,13 @@ public abstract class BaseDocument {
     @LastModifiedDate
     private Instant updatedAt;
 
+    protected BaseDocument() {
+    }
+
+    protected BaseDocument(UUID id) {
+        this.id = id;
+    }
+
     public void ensureId() {
         if (id == null) {
             id = UUID.randomUUID();

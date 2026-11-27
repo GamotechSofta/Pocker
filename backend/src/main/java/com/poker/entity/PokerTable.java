@@ -210,4 +210,21 @@ public class PokerTable extends BaseDocument {
     public void removePlayer(PokerTablePlayer player) {
         players.remove(player);
     }
+
+    public List<PokerTablePlayer> snapshotPlayers() {
+        List<PokerTablePlayer> copy = new ArrayList<>(players.size());
+        for (PokerTablePlayer player : players) {
+            copy.add(player.copy());
+        }
+        return copy;
+    }
+
+    public void restoreSnapshot(TableStatus savedStatus, List<PokerTablePlayer> savedPlayers) {
+        this.status = savedStatus;
+        this.players.clear();
+        if (savedPlayers != null) {
+            this.players.addAll(savedPlayers);
+            this.players.sort(Comparator.comparingInt(PokerTablePlayer::getSeat));
+        }
+    }
 }

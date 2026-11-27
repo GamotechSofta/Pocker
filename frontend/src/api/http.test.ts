@@ -7,11 +7,12 @@ describe('http client', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     localStorage.clear()
-    useAuthStore.setState({ token: null, user: null })
+    sessionStorage.clear()
+    useAuthStore.getState().logout()
   })
 
   it('attaches the bearer token and returns JSON', async () => {
-    localStorage.setItem('poker.accessToken', 'jwt-1')
+    sessionStorage.setItem('poker.accessToken', 'jwt-1')
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -76,7 +77,7 @@ describe('http client', () => {
 
     await expect(http('/api/auth/me')).rejects.toBeInstanceOf(ApiRequestError)
     expect(useAuthStore.getState().token).toBeNull()
-    expect(localStorage.getItem('poker.accessToken')).toBeNull()
+    expect(sessionStorage.getItem('poker.accessToken')).toBeNull()
   })
 
   it('keeps the replacement session when an older request returns 401', async () => {
@@ -92,6 +93,6 @@ describe('http client', () => {
 
     await expect(pendingRequest).rejects.toMatchObject({ status: 401 })
     expect(useAuthStore.getState().token).toBe('replacement-jwt')
-    expect(localStorage.getItem('poker.accessToken')).toBe('replacement-jwt')
+    expect(sessionStorage.getItem('poker.accessToken')).toBe('replacement-jwt')
   })
 })

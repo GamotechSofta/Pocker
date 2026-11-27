@@ -6,10 +6,25 @@ import type { GameActionRequest } from '@/types/game'
 import type { WsMessage } from '@/types/ws'
 import { wsBrokerUrl } from '@/utils/env'
 import { newActionRequestId } from '@/utils/requestId'
+import { fetchWalletBalance } from '@/api/wallet'
+
+let walletRefresh: Promise<unknown> | null = null
+let walletRefreshQueued = false
+function refreshOperatorWallet(): void {
+  if (!useAuthStore.getState().launch || useAuthStore.getState().sessionBlocked) return
+  if (walletRefresh) { walletRefreshQueued = true; return }
+  walletRefresh = fetchWalletBalance().catch(() => undefined).finally(() => {
+    walletRefresh = null
+    if (walletRefreshQueued) { walletRefreshQueued = false; refreshOperatorWallet() }
+  })
+}
 
 function applyMessage(raw: IMessage): void {
   const payload = JSON.parse(raw.body) as WsMessage
   if (payload.type === 'ERROR') {
+    if (useAuthStore.getState().launch && ['OPERATOR_SESSION_EXPIRED', 'UNAUTHORIZED'].includes(payload.code ?? '')) {
+      useAuthStore.getState().blockOperatorSession()
+    }
     useGameStore.getState().setLastError({
       code: payload.code ?? 'INVALID_GAME_ACTION',
       message: payload.message ?? 'Invalid game action.',
@@ -18,6 +33,7 @@ function applyMessage(raw: IMessage): void {
   }
   if (payload.state) {
     useGameStore.getState().setGameState(payload.state)
+    refreshOperatorWallet()
   }
   if (payload.clock) useGameStore.getState().setBlindClock(payload.clock)
   if (payload.leaderboard) useGameStore.getState().setLeaderboard(payload.leaderboard)
@@ -65,6 +81,11 @@ export class GameSocket {
         heartbeatIncoming: 10_000,
         heartbeatOutgoing: 10_000,
         beforeConnect: () => {
+          if (useAuthStore.getState().sessionBlocked) {
+            this.manualClose = true
+            client.reconnectDelay = 0
+            throw new Error('Your operator session has expired.')
+          }
           const latest = useAuthStore.getState().token ?? this.token
           if (!latest) {
             this.manualClose = true
@@ -91,6 +112,7 @@ export class GameSocket {
           client.reconnectDelay = 0
           useGameStore.getState().setConnectionStatus('error')
           useGameStore.getState().setLastError({ code: 'UNAUTHORIZED', message })
+          if (useAuthStore.getState().launch) useAuthStore.getState().blockOperatorSession()
           this.disconnectClient(true)
           reject(new Error(message))
         },
@@ -125,6 +147,7 @@ export class GameSocket {
   }
 
   sendAction(tableId: string, request: GameActionRequest): void {
+    if (useAuthStore.getState().sessionBlocked) throw new Error('Your operator session has expired.')
     if (!this.client?.connected) {
       throw new Error('WebSocket is not connected.')
     }

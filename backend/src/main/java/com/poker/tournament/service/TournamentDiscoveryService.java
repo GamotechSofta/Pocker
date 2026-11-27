@@ -114,7 +114,7 @@ public class TournamentDiscoveryService {
         registered.forEach(entrant -> userIds.add(entrant.getUserId()));
         standings.forEach(result -> userIds.add(result.getUserId()));
         var names = userIds.isEmpty() ? Map.<UUID, String>of() : users.findAllById(userIds).stream()
-                .collect(Collectors.toMap(User::getId, User::getUsername));
+                .collect(Collectors.toMap(User::getId, User::getDisplayName));
         var players = players(registered, names, viewer);
         var ranks = standings.stream().map(result -> new TournamentDiscovery.Result(result.getFinishPosition(),
                 result.getDisplayName() == null ? names.getOrDefault(result.getUserId(), "Player") : result.getDisplayName(),

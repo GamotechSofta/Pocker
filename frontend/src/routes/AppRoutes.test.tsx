@@ -5,12 +5,25 @@ import { createGuestSession, fetchCurrentUser } from '@/api/auth'
 import { appRouteObjects } from '@/routes/appRouteObjects'
 import { useAuthStore } from '@/store/authStore'
 
-vi.mock('@/api/auth', () => ({
-  login: vi.fn(),
-  register: vi.fn(),
-  createGuestSession: vi.fn(),
-  fetchCurrentUser: vi.fn(),
-}))
+vi.mock('@/api/auth', () => {
+  const createGuestSession = vi.fn()
+  const fetchCurrentUser = vi.fn()
+  return {
+    login: vi.fn(),
+    register: vi.fn(),
+    createGuestSession,
+    fetchCurrentUser,
+    ensureGuestSession: vi.fn(async () => {
+      const store = useAuthStore.getState()
+      if (store.token && store.user) {
+        return { token: store.token, tokenType: 'Bearer', expiresIn: 0, user: store.user }
+      }
+      const session = await createGuestSession()
+      useAuthStore.getState().setSession(session)
+      return session
+    }),
+  }
+})
 
 vi.mock('@/api/tables', () => ({
   listTables: vi.fn().mockResolvedValue([]),

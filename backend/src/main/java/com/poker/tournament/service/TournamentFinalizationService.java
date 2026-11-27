@@ -196,7 +196,7 @@ public class TournamentFinalizationService {
 
     private static TournamentCompletion commit(MongoTemplate tx, Tournament event, Eligible result, Instant now) {
         var players = tx.find(Query.query(Criteria.where("id").in(result.field().stream().map(TournamentEntrant::getUserId).toList())), User.class)
-                .stream().collect(Collectors.toMap(User::getId, User::getUsername));
+                .stream().collect(Collectors.toMap(User::getId, User::getDisplayName));
         var handCounts = tx.aggregate(Aggregation.newAggregation(
                 Aggregation.match(Criteria.where("tournamentId").is(event.getId()).and("type").is(TournamentChipLedgerEntry.EntryType.HAND_RESULT)),
                 Aggregation.group("entrantId").count().as("hands")), "tournament_chip_ledger", HandCount.class)
