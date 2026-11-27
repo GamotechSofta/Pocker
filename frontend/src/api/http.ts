@@ -7,6 +7,7 @@ const AUTH_PATHS_WITHOUT_SESSION = new Set([
   '/api/auth/login',
   '/api/auth/register',
   '/api/auth/guest',
+  '/api/auth/launch',
 ])
 
 export async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -15,7 +16,11 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<T> 
     headers.set('Accept', 'application/json')
   }
   const token = getAccessToken()
-  if (token && !headers.has('Authorization')) {
+  // Bootstrap endpoints must not receive a stale browser JWT. Spring Security
+  // attempts to authenticate any supplied bearer token before it reaches the
+  // permit-all controller route, which otherwise turns a local guest launch
+  // into a 401 response.
+  if (token && !AUTH_PATHS_WITHOUT_SESSION.has(path) && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`)
   }
   if (init.body != null && !headers.has('Content-Type')) {
