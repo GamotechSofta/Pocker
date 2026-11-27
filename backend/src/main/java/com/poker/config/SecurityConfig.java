@@ -1,6 +1,5 @@
 package com.poker.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.poker.security.RestAccessDeniedHandler;
 import com.poker.security.RestAuthenticationEntryPoint;
@@ -32,17 +31,6 @@ import java.util.Set;
 @Configuration
 @EnableConfigurationProperties({JwtProperties.class, TableProperties.class, WalletProperties.class, OperationsProperties.class})
 public class SecurityConfig {
-
-    /**
-     * Spring Boot 4 does not create a Jackson 2 mapper automatically when the
-     * application is using the Spring Framework 7 web stack.  The Operations
-     * wallet client still uses Jackson 2's JsonNode response type, so expose a
-     * dedicated mapper for that server-to-server client.
-     */
-    @Bean
-    ObjectMapper objectMapper() {
-        return new ObjectMapper();
-    }
 
     @Bean
     SecurityFilterChain securityFilterChain(

@@ -1,7 +1,6 @@
 package com.poker.operations;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poker.config.OperationsProperties;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -16,12 +15,10 @@ import java.util.Map;
 @Service
 public class OperationsWalletClient {
     private final OperationsProperties properties;
-    private final ObjectMapper objectMapper;
     private final RestClient client = RestClient.create();
 
-    public OperationsWalletClient(OperationsProperties properties, ObjectMapper objectMapper) {
+    public OperationsWalletClient(OperationsProperties properties) {
         this.properties = properties;
-        this.objectMapper = objectMapper;
     }
 
     public BigDecimal balance(String token, String partnerCode) {
@@ -54,7 +51,11 @@ public class OperationsWalletClient {
             if (response == null || !response.path("status").asBoolean(false)) {
                 throw new IllegalStateException(response == null ? "Operations wallet did not respond." : response.path("message").asText("Wallet operation rejected."));
             }
-            return objectMapper.treeToValue(response.path("message"), BigDecimal.class);
+            JsonNode message = response.path("message");
+            if (message.isMissingNode() || message.isNull()) {
+                throw new IllegalStateException("Operations wallet did not return a balance.");
+            }
+            return new BigDecimal(message.asText());
         } catch (Exception error) {
             throw new IllegalStateException("Operations wallet request failed: " + error.getMessage(), error);
         }
