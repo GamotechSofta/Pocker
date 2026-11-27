@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchCurrentUser, launchOperatorSession } from '@/api/auth'
+import { createGuestSession, fetchCurrentUser, launchOperatorSession } from '@/api/auth'
 import { ApiRequestError } from '@/api/errors'
 import { useAuthStore } from '@/store/authStore'
 
@@ -23,7 +23,16 @@ export function useSessionReady() {
           const profile = await fetchCurrentUser()
           if (current()) useAuthStore.getState().setUser(profile)
         } else {
-          const session = await launchOperatorSession()
+          // The operator supplies these values only for real game launches.
+          // A direct localhost URL has no operator session, so keep development
+          // usable with the backend's local guest wallet.
+          const query = new URLSearchParams(window.location.search)
+          const isOperatorLaunch = Boolean(
+            query.get('token') && query.get('partner_code') && query.get('gid') && query.get('username'),
+          )
+          const session = import.meta.env.DEV && !isOperatorLaunch
+            ? await createGuestSession()
+            : await launchOperatorSession()
           if (current()) useAuthStore.getState().setSession(session)
         }
       } catch (error) {
