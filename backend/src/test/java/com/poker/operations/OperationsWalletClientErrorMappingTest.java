@@ -91,10 +91,12 @@ class OperationsWalletClientErrorMappingTest {
     }
 
     @Test
-    void rejectsNonNumericOrBlankGidBeforeCallingOperations() {
-        assertThrows(IllegalArgumentException.class, () -> OperationsWalletClient.numericGid("poker-holdem"));
-        assertThrows(IllegalArgumentException.class, () -> OperationsWalletClient.numericGid("0"));
-        assertThrows(IllegalArgumentException.class, () -> OperationsWalletClient.numericGid(" "));
+    void supportsNumericAndStringGidsWhileRejectingBlankOrControlChars() {
+        assertEquals(42L, OperationsWalletClient.wireGid("0042"));
+        assertEquals("POKERRAZZ", OperationsWalletClient.wireGid(" POKERRAZZ "));
+        assertEquals("0", OperationsWalletClient.wireGid("0"));
+        assertThrows(IllegalArgumentException.class, () -> OperationsWalletClient.normalizeGid(" "));
+        assertThrows(IllegalArgumentException.class, () -> OperationsWalletClient.normalizeGid("bad\ngid"));
     }
 
     @Test

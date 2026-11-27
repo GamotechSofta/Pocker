@@ -63,11 +63,11 @@ function normalizeLang(raw: string | null): string {
 }
 
 function normalizeGid(raw: string): string {
-  const stripped = raw.replace(/^0+(?=[1-9])/, '')
-  if (!/^[1-9]\d{0,17}$/.test(stripped)) {
+  const trimmed = raw.trim()
+  if (!trimmed || trimmed.length > 128 || /[\x00-\x1f\x7f]/.test(trimmed)) {
     throw new Error('The game launch parameters are invalid (gid). Please launch again from the operator lobby.')
   }
-  return stripped
+  return /^0+[1-9]\d{0,17}$/.test(trimmed) ? trimmed.replace(/^0+/, '') : trimmed
 }
 
 export function readOperatorLaunch(search: string): LaunchRequest | null {

@@ -33,7 +33,7 @@ public class OperatorTransfer {
         OperatorGameType type = OperatorGameType.from(gameType);
         type.validate(bet, win, type.transferType());
         this.id = id; this.playerId = playerId; this.token = token; this.partnerCode = partnerCode;
-        this.gid = Long.toString(OperationsWalletClient.numericGid(gid));
+        this.gid = OperationsWalletClient.normalizeGid(gid);
         this.currency = currency == null ? "INR" : currency;
         this.bet = bet; this.win = win; this.gameType = type.wireName(); this.roundId = roundId;
     }

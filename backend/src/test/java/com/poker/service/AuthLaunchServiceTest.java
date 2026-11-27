@@ -47,9 +47,9 @@ class AuthLaunchServiceTest {
         assertEquals("en", result.launch().lang());
         assertEquals("poker-razz", result.launch().gameCode());
         assertEquals("external", result.launch().extsess());
-        assertEquals("ALPHA-TEST", savedSessions.get(result.user().id().toString()).getPartnerCode());
+        assertEquals("alpha-test", savedSessions.get(result.user().id().toString()).getPartnerCode());
         var order = inOrder(operations, jwt);
-        order.verify(operations).balance("provider-token", "ALPHA-TEST");
+        order.verify(operations).balance("provider-token", "alpha-test");
         order.verify(jwt).createToken(any(User.class));
     }
     @Test void defaultsCurrencyAndLanguage() {
@@ -76,10 +76,17 @@ class AuthLaunchServiceTest {
     }
     @Test void invalidLaunchNeverContactsProvider() {
         assertThrows(ApiException.class, () -> auth.launch(new GameLaunchRequest("token", "P", "1001", "", "Alex", null, null, null, null, null)));
-        for (String gid : List.of("0", "-1", "1.5", "1e3")) assertThrows(ApiException.class, () -> auth.launch(request("t", gid)));
+        for (String gid : List.of("", "   ", "bad\ngid")) assertThrows(ApiException.class, () -> auth.launch(request("t", gid)));
         for (String url : List.of("javascript:alert(1)", "//operator.example", "https://u:p@operator.example"))
             assertThrows(ApiException.class, () -> auth.launch(new GameLaunchRequest("t", "P", "1001", "razz", "Alex", null, null, null, null, url)));
         verifyNoInteractions(operations, users, jwt, sessions);
+    }
+
+    @Test void acceptsStringGameIdentifiersLikePokerRazzFromOperatorLobby() {
+        var result = auth.launch(new GameLaunchRequest(
+                "tok-razz", "123games", "POKERRAZZ", "Poker-Razz", "alex", "u-1", "INR", "en", null, null));
+        assertEquals("POKERRAZZ", savedSessions.get(result.user().id().toString()).getGid());
+        assertEquals("123games", savedSessions.get(result.user().id().toString()).getPartnerCode());
     }
     @Test void blockedSessionCannotBeReopenedByLaunchReplay() {
         var first = auth.launch(request("token", "1001"));

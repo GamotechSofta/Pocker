@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 public record GameLaunchRequest(
         @NotBlank @Size(max = 2048) String token,
         @NotBlank @Size(max = 128) @JsonAlias("partner_code") String partnerCode,
-        @NotBlank @Size(max = 18) String gid,
+        @NotBlank @Size(max = 128) String gid,
         @NotBlank @Size(max = 128) @JsonAlias("game_code") String gameCode,
         @NotBlank @Size(max = 128) String username,
         @Size(max = 256) @JsonAlias("user_id") String userId,

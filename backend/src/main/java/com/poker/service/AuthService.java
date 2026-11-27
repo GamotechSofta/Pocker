@@ -150,9 +150,11 @@ public class AuthService {
     private static GameLaunchRequest normalizedLaunch(GameLaunchRequest request) {
         if (request == null) throw invalidLaunch("Launch request is required.");
         String token = launchValue(request.token(), "token", 2048, true);
-        String partner = launchValue(request.partnerCode(), "partner_code", 128, true).toUpperCase(Locale.ROOT);
-        String gid = launchValue(request.gid(), "gid", 32, true).replaceFirst("^0+(?=[1-9])", "");
-        if (!gid.matches("[1-9][0-9]{0,17}")) throw invalidLaunch("gid must be a positive integer.");
+        String partner = launchValue(request.partnerCode(), "partner_code", 128, true);
+        String gid = launchValue(request.gid(), "gid", 128, true);
+        if (gid.matches("0+[1-9][0-9]{0,17}")) {
+            gid = gid.replaceFirst("^0+", "");
+        }
         String gameCode = launchValue(request.gameCode(), "game_code", 128, true);
         String username = launchValue(request.username(), "username", 128, true);
         String userId = launchValue(request.userId(), "user_id", 256, false);

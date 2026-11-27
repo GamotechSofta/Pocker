@@ -53,7 +53,7 @@ public class OperationsWalletClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("token", token);
         body.put("partner_code", partnerCode);
-        body.put("gid", numericGid(gid));
+        body.put("gid", wireGid(gid));
         body.put("bet", bet);
         body.put("win", win);
         body.put("game_type", gameType);
@@ -63,15 +63,23 @@ public class OperationsWalletClient {
         return post("/api/v1/wallet/credit-transfer", body);
     }
 
-    public static long numericGid(String raw) {
+    public static String normalizeGid(String raw) {
         if (raw == null || raw.isBlank()) {
-            throw new IllegalArgumentException("gid must be a positive integer.");
+            throw new IllegalArgumentException("gid is required.");
         }
-        String trimmed = raw.trim().replaceFirst("^0+(?=[1-9])", "");
-        if (!trimmed.matches("[1-9][0-9]{0,17}")) {
-            throw new IllegalArgumentException("gid must be a positive integer.");
+        String trimmed = raw.trim();
+        if (trimmed.length() > 128 || trimmed.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("gid is invalid.");
         }
-        return Long.parseLong(trimmed);
+        if (trimmed.matches("0+[1-9][0-9]{0,17}")) {
+            return trimmed.replaceFirst("^0+", "");
+        }
+        return trimmed;
+    }
+
+    public static Object wireGid(String raw) {
+        String normalized = normalizeGid(raw);
+        return normalized.matches("[1-9][0-9]{0,17}") ? Long.valueOf(Long.parseLong(normalized)) : normalized;
     }
 
     private BigDecimal post(String path, Map<String, ?> body) {

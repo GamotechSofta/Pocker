@@ -43,8 +43,26 @@ describe('operatorLaunch utilities', () => {
       /The game launch is incomplete/i,
     )
     expect(() =>
-      readOperatorLaunch('?token=t1&partner_code=P1&gid=bad&game_code=Poker-FiveCard&username=alex'),
+      readOperatorLaunch('?token=t1&partner_code=P1&gid=%07&game_code=Poker-FiveCard&username=alex'),
     ).toThrow(/\(gid\)/i)
+  })
+
+  it('accepts alphanumeric string gids like POKERRAZZ as well as numeric gids', () => {
+    const stringGidLaunch = readOperatorLaunch(
+      '?token=t1&partner_code=p1&gid=POKERRAZZ&game_code=Poker-Razz&username=alex&currency=INR&lang=en',
+    )
+    expect(stringGidLaunch).toEqual({
+      token: 't1',
+      partnerCode: 'p1',
+      gid: 'POKERRAZZ',
+      gameCode: 'Poker-Razz',
+      username: 'alex',
+      userId: null,
+      currency: 'INR',
+      lang: 'en',
+      extsess: null,
+      closeUrl: null,
+    })
   })
 
   it('normalizes currency aliases, locale underscores/names, leading-zero gids, and >15 digit gids', () => {
