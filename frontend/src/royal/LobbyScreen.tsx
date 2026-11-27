@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Coins,
   DoorOpen,
+  History,
   KeyRound,
   Layers,
   Minus,
@@ -78,13 +79,21 @@ function StakeStepper({
   )
 }
 
-function StakeNavRight() {
+function StakeNavRight({ variant, variantLocked }: { variant: string; variantLocked: boolean }) {
   const { simulatedLandscape, toggleFlip } = useLandscapeGate()
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
       <div className="stake-step">
         Step 2 of 2: <strong>Configure Table</strong>
       </div>
+      <Link
+        to={variantLocked ? paths.history : paths.variantHistory(variant)}
+        className="stake-history-btn"
+        onClick={() => soundEngine.play('click')}
+      >
+        <History size={13} />
+        <span>History</span>
+      </Link>
       {simulatedLandscape && (
         <button
           type="button"
@@ -505,6 +514,16 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
               </button>
             )}
 
+            <Link
+              to={variantLocked ? paths.history : currentPage === 'CONFIGURE_TABLE' ? paths.variantHistory(selectedVariant) : paths.history}
+              className="lobby-link-btn"
+              title="Game History"
+              onClick={() => soundEngine.play('click')}
+            >
+              <History size={14} />
+              <span>History</span>
+            </Link>
+
             <button
               type="button"
               className="lobby-balance"
@@ -551,12 +570,18 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
               >
                 ENTER {lockedArt.title.toUpperCase()} <span aria-hidden>→</span>
               </button>
-              {showTournamentsInApp() && (
-                <Link className="player-tournament-button player-tournament-secondary player-tournament-entry" to={paths.tournaments}
+              <div className="variant-intro-links">
+                {showTournamentsInApp() && (
+                  <Link className="player-tournament-button player-tournament-secondary player-tournament-entry" to={paths.tournaments}
+                    onClick={() => soundEngine.play('click')}>
+                    <Trophy size={17} aria-hidden="true" /> Tournaments
+                  </Link>
+                )}
+                <Link className="player-tournament-button player-tournament-secondary player-tournament-entry" to={paths.variantHistory(lockedArt.id)}
                   onClick={() => soundEngine.play('click')}>
-                  <Trophy size={17} aria-hidden="true" /> Tournaments
+                  <History size={17} aria-hidden="true" /> History
                 </Link>
-              )}
+              </div>
             </div>
           )}
 
@@ -614,7 +639,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                     {variantTitle(selectedVariant)}
                   </div>
                 )}
-                <StakeNavRight />
+                <StakeNavRight variant={selectedVariant} variantLocked={variantLocked} />
               </div>
 
               <div className="stake-card">
@@ -639,7 +664,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                       {variantTitle(selectedVariant)}
                     </div>
                   )}
-                  <StakeNavRight />
+                  <StakeNavRight variant={selectedVariant} variantLocked={variantLocked} />
                 </div>
 
                 <div className="stake-emblem">

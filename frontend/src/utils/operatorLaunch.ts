@@ -1,6 +1,19 @@
 import type { OperatorLaunch } from '@/types/api'
+import { lockedPokerVariant } from '@/config/variantApp'
 
 const LAUNCH_KEYS = ['token', 'partner_code', 'gid', 'game_code', 'username', 'user_id', 'currency', 'lang', 'extsess', 'close_url']
+
+const CURRENCY_ALIASES: Record<string, string> = {
+  '₹': 'INR',
+  RS: 'INR',
+  RUPEE: 'INR',
+  RUPEES: 'INR',
+}
+
+const LANG_ALIASES: Record<string, string> = {
+  english: 'en',
+  hindi: 'hi',
+}
 
 export type LaunchRequest = {
   token: string
@@ -30,25 +43,61 @@ export function safeCloseUrl(value: string | null | undefined): string | null {
   }
 }
 
+function normalizeCurrency(raw: string | null): string {
+  const trimmed = raw?.trim()
+  if (!trimmed) return 'INR'
+  const upper = trimmed.toUpperCase()
+  const resolved = CURRENCY_ALIASES[upper] ?? upper
+  if (!/^[A-Z0-9]{2,12}$/.test(resolved)) {
+    throw new Error('The game launch parameters are invalid (currency). Please launch again from the operator lobby.')
+  }
+  return resolved
+}
+
+function normalizeLang(raw: string | null): string {
+  const trimmed = raw?.trim()
+  if (!trimmed) return 'en'
+  const normalized = trimmed.replaceAll('_', '-').toLowerCase()
+  const resolved = LANG_ALIASES[normalized] ?? normalized
+  return /^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$/.test(resolved) ? resolved : 'en'
+}
+
+function normalizeGid(raw: string): string {
+  const stripped = raw.replace(/^0+(?=[1-9])/, '')
+  if (!/^[1-9]\d{0,17}$/.test(stripped)) {
+    throw new Error('The game launch parameters are invalid (gid). Please launch again from the operator lobby.')
+  }
+  return stripped
+}
+
 export function readOperatorLaunch(search: string): LaunchRequest | null {
   if (!hasOperatorLaunch(search)) return null
   const query = new URLSearchParams(search)
   const required = (key: string) => {
     const value = query.get(key)?.trim()
-    if (!value) throw new Error('The game launch is incomplete. Please return to the operator lobby and launch again.')
+    if (!value) {
+      throw new Error(`The game launch is incomplete (missing ${key}). Please return to the operator lobby and launch again.`)
+    }
     return value
   }
-  const currency = (query.get('currency') || 'INR').toUpperCase()
-  const lang = (query.get('lang') || 'en').toLowerCase()
-  const gid = required('gid')
-  if (!/^[1-9]\d*$/.test(gid) || !Number.isSafeInteger(Number(gid)) || !/^[A-Z]{3}$/.test(currency) || !/^[a-z]{2,3}(?:-[a-z0-9]+)*$/.test(lang)) {
-    throw new Error('The game launch parameters are invalid. Please launch again from the operator lobby.')
+  const currency = normalizeCurrency(query.get('currency'))
+  const lang = normalizeLang(query.get('lang'))
+  const gid = normalizeGid(required('gid'))
+  const rawGameCode = query.get('game_code')?.trim() || lockedPokerVariant() || ''
+  if (!rawGameCode) {
+    throw new Error('The game launch is incomplete (missing game_code). Please return to the operator lobby and launch again.')
   }
   return {
-    token: required('token'), partnerCode: required('partner_code'), gid,
-    gameCode: required('game_code'), username: required('username'),
-    userId: query.get('user_id'), currency, lang, extsess: query.get('extsess'),
-    closeUrl: safeCloseUrl(query.get('close_url')),
+    token: required('token'),
+    partnerCode: required('partner_code'),
+    gid,
+    gameCode: rawGameCode,
+    username: required('username'),
+    userId: query.get('user_id')?.trim() || null,
+    currency,
+    lang,
+    extsess: query.get('extsess')?.trim() || null,
+    closeUrl: safeCloseUrl(query.get('close_url')?.trim()),
   }
 }
 

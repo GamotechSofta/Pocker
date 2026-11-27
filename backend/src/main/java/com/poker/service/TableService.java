@@ -26,9 +26,11 @@ import com.poker.game.engine.PlayerAction;
 import com.poker.game.engine.PlayerState;
 import com.poker.game.engine.TableConfig;
 import com.poker.game.engine.TexasHoldemEngine;
+import com.poker.game.model.Card;
 import com.poker.game.variants.PokerVariant;
 import com.poker.game.variants.TexasHoldemVariant;
 import com.poker.game.variants.Variants;
+import com.poker.history.HandHistoryService;
 import com.poker.mapper.TableMapper;
 import com.poker.repository.PokerTableRepository;
 import com.poker.repository.UserRepository;
@@ -39,6 +41,7 @@ import com.poker.websocket.TableUpdatedEvent;
 import com.poker.websocket.WsEventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -46,6 +49,8 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -72,10 +77,14 @@ public class TableService {
     private final ApplicationEventPublisher events;
     private final WalletService walletService;
     private final StakeEscrowService stakeEscrowService;
+    private final HandHistoryService handHistoryService;
     private final Map<UUID, TexasHoldemEngine> engines = new ConcurrentHashMap<>();
     private final Map<UUID, Object> locks = new ConcurrentHashMap<>();
     /** tableId:userId -> active buy-in/rebuy escrow id */
     private final Map<String, String> seatEscrows = new ConcurrentHashMap<>();
+    private final Map<UUID, Map<String, Integer>> handStartStacks = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<String>> handHumanIds = new ConcurrentHashMap<>();
+    private final Map<UUID, List<HandHistoryService.DepartedParticipant>> departedDuringHand = new ConcurrentHashMap<>();
     private final Set<String> processedRequestIds = ConcurrentHashMap.newKeySet();
     private final ConcurrentLinkedQueue<String> processedRequestIdOrder = new ConcurrentLinkedQueue<>();
     private final java.util.concurrent.atomic.AtomicBoolean draining = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -100,12 +109,26 @@ public class TableService {
             WalletService walletService,
             StakeEscrowService stakeEscrowService
     ) {
+        this(tableRepository, userRepository, tableProperties, events, walletService, stakeEscrowService, null);
+    }
+
+    @Autowired
+    public TableService(
+            PokerTableRepository tableRepository,
+            UserRepository userRepository,
+            TableProperties tableProperties,
+            ApplicationEventPublisher events,
+            WalletService walletService,
+            StakeEscrowService stakeEscrowService,
+            HandHistoryService handHistoryService
+    ) {
         this.tableRepository = tableRepository;
         this.userRepository = userRepository;
         this.tableProperties = tableProperties;
         this.events = events;
         this.walletService = walletService;
         this.stakeEscrowService = stakeEscrowService;
+        this.handHistoryService = handHistoryService;
     }
 
     public List<TableSummaryResponse> listTables() {
@@ -322,9 +345,11 @@ public class TableService {
                     if (evictExpiredOperatorPlayers(table, engine)) {
                         fundRebuys(table, engine);
                         if (engine.state().getPlayers().size() >= 2) {
+                            captureHandStart(table, engine);
                             engine.startHand();
                             syncStatusAndStacks(table, engine);
                             tableRepository.save(table);
+                            recordIfHandCompleted(table, engine, GameStatus.WAITING);
                             publish(tableId, WsEventType.PLAYER_JOINED);
                             publish(tableId, WsEventType.HAND_STARTED);
                             return TableMapper.toDetail(requireTable(tableId));
@@ -333,6 +358,7 @@ public class TableService {
                 } catch (RuntimeException ex) {
                     engines.put(tableId, TexasHoldemEngine.restore(beforeAutoStart));
                     table.restoreSnapshot(statusBeforeAutoStart, playersBeforeAutoStart);
+                    clearHandTracking(tableId);
                     log.warn("Private room auto-start held at {} pending wallet confirmation: {}", tableId, ex.getMessage());
                 }
             }
@@ -354,22 +380,55 @@ public class TableService {
             TableStatus statusBefore = table.getStatus();
             String seatEscrowKey = seatKey(tableId, userId);
             String trackedEscrowBefore = seatEscrows.get(seatEscrowKey);
+            GameStatus gameStatusBefore = engine.state().getStatus();
+            boolean handWasActive = engine.state().isHandInProgress()
+                    || engine.state().isBettingActive()
+                    || engine.state().isDiscardActive()
+                    || engine.state().isDrawActive();
+            PlayerState leavingPlayer = engine.state().player(userId.toString());
+            int handNumAtLeave = engine.state().getHandNumber();
+            int potAtLeave = engine.state().getPot();
+            List<String> leavingCards = leavingPlayer != null
+                    ? leavingPlayer.getHoleCards().stream().map(Card::code).toList()
+                    : List.of();
+            List<String> boardAtLeave = engine.state().getCommunityCards().stream().map(Card::code).toList();
+            List<HandHistoryService.DepartedParticipant> departedBefore = snapshotDeparted(tableId);
 
             try {
-                PlayerState live = engine.state().player(userId.toString());
-                int cashOut = live != null ? live.getChipStack() : seated.getChipStack();
+                int cashOut = leavingPlayer != null ? leavingPlayer.getChipStack() : seated.getChipStack();
                 engine.abandonSeat(userId.toString());
                 table.removePlayer(seated);
                 String cashOutTranId = "CASHOUT_" + tableId + "_" + seated.getId();
                 settleSeatWallet(tableId, userId, cashOut, BotService.isBot(seated), seated.getEscrowId(), cashOutTranId);
                 syncStatusAndStacks(table, engine);
                 tableRepository.save(table);
+                if (handWasActive && leavingPlayer != null) {
+                    int startStack = handStartStacks.getOrDefault(tableId, Map.of())
+                            .getOrDefault(userId.toString(), leavingPlayer.getChipStack() + leavingPlayer.getHandContribution());
+                    int netChips = cashOut - startStack;
+                    HandHistoryService.DepartedParticipant departed = new HandHistoryService.DepartedParticipant(
+                            userId.toString(),
+                            seated.getUsername(),
+                            cashOut,
+                            netChips,
+                            potAtLeave,
+                            leavingCards,
+                            boardAtLeave
+                    );
+                    departedDuringHand.computeIfAbsent(tableId, k -> new ArrayList<>()).add(departed);
+                    if (engine.state().getStatus() == GameStatus.NEXT_HAND) {
+                        recordIfHandCompleted(table, engine, gameStatusBefore);
+                    } else if (!BotService.isBot(seated)) {
+                        recordMidHandLeaveSafely(table, handNumAtLeave, departed);
+                    }
+                }
                 TableDetailResponse detail = TableMapper.toDetail(requireTable(tableId));
                 publish(tableId, WsEventType.PLAYER_LEFT);
                 return detail;
             } catch (RuntimeException ex) {
                 engines.put(tableId, TexasHoldemEngine.restore(engineBefore));
                 table.restoreSnapshot(statusBefore, playersBefore);
+                restoreDeparted(tableId, departedBefore);
                 if (trackedEscrowBefore != null) {
                     seatEscrows.put(seatEscrowKey, trackedEscrowBefore);
                 }
@@ -389,6 +448,10 @@ public class TableService {
             TexasHoldemEngine.Snapshot engineBefore = engine.snapshot();
             List<PokerTablePlayer> playersBefore = table.snapshotPlayers();
             TableStatus statusBefore = table.getStatus();
+            Map<String, Integer> startStacksBefore = snapshotStartStacks(tableId);
+            Set<String> humansBefore = snapshotHumanIds(tableId);
+            List<HandHistoryService.DepartedParticipant> departedBefore = snapshotDeparted(tableId);
+            GameStatus gameStatusBefore = engine.state().getStatus();
             try {
                 removeDepartedEnginePlayers(table, engine);
                 if (!evictExpiredOperatorPlayers(table, engine)) {
@@ -404,15 +467,18 @@ public class TableService {
                         throw new InvalidGameActionException("Need at least 2 players to start.");
                     }
                 }
+                captureHandStart(table, engine);
                 engine.startHand();
                 syncStatusAndStacks(table, engine);
                 tableRepository.save(table);
+                recordIfHandCompleted(table, engine, gameStatusBefore);
                 TableStateResponse state = TableMapper.toSanitizedState(table, engine, userId, syncTurnTimer(table, engine));
                 publish(tableId, WsEventType.HAND_STARTED);
                 return state;
             } catch (RuntimeException ex) {
                 engines.put(tableId, TexasHoldemEngine.restore(engineBefore));
                 table.restoreSnapshot(statusBefore, playersBefore);
+                restoreHandTracking(tableId, startStacksBefore, humansBefore, departedBefore);
                 throw ex;
             }
         }
@@ -432,6 +498,9 @@ public class TableService {
             TexasHoldemEngine.Snapshot engineBefore = engine.snapshot();
             List<PokerTablePlayer> playersBefore = table.snapshotPlayers();
             TableStatus statusBefore = table.getStatus();
+            Map<String, Integer> startStacksBefore = snapshotStartStacks(tableId);
+            Set<String> humansBefore = snapshotHumanIds(tableId);
+            List<HandHistoryService.DepartedParticipant> departedBefore = snapshotDeparted(tableId);
             try {
                 removeDepartedEnginePlayers(table, engine);
                 if (!evictExpiredOperatorPlayers(table, engine)) {
@@ -447,15 +516,18 @@ public class TableService {
                     tableRepository.save(table);
                     return false;
                 }
+                captureHandStart(table, engine);
                 engine.startHand();
                 syncStatusAndStacks(table, engine);
                 tableRepository.save(table);
+                recordIfHandCompleted(table, engine, GameStatus.STARTING);
                 syncTurnTimer(table, engine);
                 publish(tableId, WsEventType.HAND_STARTED);
                 return true;
             } catch (RuntimeException ex) {
                 engines.put(tableId, TexasHoldemEngine.restore(engineBefore));
                 table.restoreSnapshot(statusBefore, playersBefore);
+                restoreHandTracking(tableId, startStacksBefore, humansBefore, departedBefore);
                 log.debug("Auto-start next hand held for {}: {}", tableId, ex.getMessage());
                 return false;
             }
@@ -655,6 +727,7 @@ public class TableService {
             }
             syncStatusAndStacks(table, engine);
             tableRepository.save(table);
+            recordIfHandCompleted(table, engine, before);
             syncTurnTimer(table, engine);
             publish(tableId, eventAfterAction(before, engine, communityBefore));
             return true;
@@ -738,6 +811,7 @@ public class TableService {
                 table.restoreSnapshot(statusBefore, playersBefore);
                 throw ex;
             }
+            recordIfHandCompleted(table, engine, before);
             if (requestKey != null) {
                 rememberRequestId(requestKey);
             }
@@ -901,6 +975,105 @@ public class TableService {
     private User requireUser(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new PlayerNotFoundException(userId));
+    }
+
+    private void captureHandStart(PokerTable table, TexasHoldemEngine engine) {
+        UUID tableId = table.getId();
+        Map<String, Integer> starts = new HashMap<>();
+        for (PlayerState player : engine.state().getPlayers()) {
+            starts.put(player.getPlayerId(), player.getChipStack());
+        }
+        Set<String> humans = new LinkedHashSet<>();
+        for (PokerTablePlayer seated : table.getPlayers()) {
+            if (!BotService.isBot(seated)) {
+                humans.add(seated.getUserId().toString());
+            }
+        }
+        handStartStacks.put(tableId, starts);
+        handHumanIds.put(tableId, humans);
+        departedDuringHand.remove(tableId);
+    }
+
+    private void recordIfHandCompleted(PokerTable table, TexasHoldemEngine engine, GameStatus before) {
+        if (handHistoryService == null || before == GameStatus.NEXT_HAND) {
+            return;
+        }
+        if (engine.state().getStatus() != GameStatus.NEXT_HAND) {
+            return;
+        }
+        UUID tableId = table.getId();
+        Map<String, Integer> starts = handStartStacks.getOrDefault(tableId, Map.of());
+        Set<String> humans = new LinkedHashSet<>(handHumanIds.getOrDefault(tableId, Set.of()));
+        for (PokerTablePlayer seated : table.getPlayers()) {
+            if (!BotService.isBot(seated)) {
+                humans.add(seated.getUserId().toString());
+            }
+        }
+        List<HandHistoryService.DepartedParticipant> departed = departedDuringHand.remove(tableId);
+        try {
+            handHistoryService.recordCompletedHand(table, engine.state(), starts, departed, humans);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to persist hand history for table {} hand {}: {}", tableId, engine.state().getHandNumber(), ex.getMessage());
+        }
+    }
+
+    private void recordMidHandLeaveSafely(PokerTable table, int handNumber, HandHistoryService.DepartedParticipant departed) {
+        if (handHistoryService == null) {
+            return;
+        }
+        try {
+            handHistoryService.recordMidHandLeave(table, handNumber, departed, true);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to persist mid-hand leave history for table {} player {}: {}", table.getId(), departed.playerId(), ex.getMessage());
+        }
+    }
+
+    private Map<String, Integer> snapshotStartStacks(UUID tableId) {
+        Map<String, Integer> existing = handStartStacks.get(tableId);
+        return existing == null ? null : new HashMap<>(existing);
+    }
+
+    private Set<String> snapshotHumanIds(UUID tableId) {
+        Set<String> existing = handHumanIds.get(tableId);
+        return existing == null ? null : new LinkedHashSet<>(existing);
+    }
+
+    private List<HandHistoryService.DepartedParticipant> snapshotDeparted(UUID tableId) {
+        List<HandHistoryService.DepartedParticipant> existing = departedDuringHand.get(tableId);
+        return existing == null ? null : new ArrayList<>(existing);
+    }
+
+    private void restoreDeparted(UUID tableId, List<HandHistoryService.DepartedParticipant> departedBefore) {
+        if (departedBefore == null) {
+            departedDuringHand.remove(tableId);
+        } else {
+            departedDuringHand.put(tableId, departedBefore);
+        }
+    }
+
+    private void restoreHandTracking(
+            UUID tableId,
+            Map<String, Integer> startStacksBefore,
+            Set<String> humansBefore,
+            List<HandHistoryService.DepartedParticipant> departedBefore
+    ) {
+        if (startStacksBefore == null) {
+            handStartStacks.remove(tableId);
+        } else {
+            handStartStacks.put(tableId, startStacksBefore);
+        }
+        if (humansBefore == null) {
+            handHumanIds.remove(tableId);
+        } else {
+            handHumanIds.put(tableId, humansBefore);
+        }
+        restoreDeparted(tableId, departedBefore);
+    }
+
+    private void clearHandTracking(UUID tableId) {
+        handStartStacks.remove(tableId);
+        handHumanIds.remove(tableId);
+        departedDuringHand.remove(tableId);
     }
 
     private Object lockFor(UUID tableId) {

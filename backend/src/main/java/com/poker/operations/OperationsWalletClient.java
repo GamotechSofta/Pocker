@@ -67,7 +67,7 @@ public class OperationsWalletClient {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("gid must be a positive integer.");
         }
-        String trimmed = raw.trim();
+        String trimmed = raw.trim().replaceFirst("^0+(?=[1-9])", "");
         if (!trimmed.matches("[1-9][0-9]{0,17}")) {
             throw new IllegalArgumentException("gid must be a positive integer.");
         }

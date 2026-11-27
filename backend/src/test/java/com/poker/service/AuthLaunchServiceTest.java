@@ -88,4 +88,12 @@ class AuthLaunchServiceTest {
         assertEquals("OPERATOR_SESSION_EXPIRED", assertThrows(ApiException.class, () -> auth.launch(request("token", "1001"))).getCode());
         verifyNoInteractions(operations, jwt);
     }
+
+    @Test void normalizesRealWorldLocaleCurrencyAndZeroPaddedGid() {
+        var result = auth.launch(new GameLaunchRequest(
+                "tok-norm", "partner", "001234567890123456", "Poker-FiveCard", "alex", null, " ₹ ", "en_IN", null, null));
+        assertEquals("INR", result.launch().currency());
+        assertEquals("en-in", result.launch().lang());
+        assertEquals("1234567890123456", savedSessions.get(result.user().id().toString()).getGid());
+    }
 }

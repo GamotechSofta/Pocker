@@ -11,7 +11,7 @@ public record GameLaunchRequest(
         @NotBlank @Size(max = 128) @JsonAlias("game_code") String gameCode,
         @NotBlank @Size(max = 128) String username,
         @Size(max = 256) @JsonAlias("user_id") String userId,
-        @Size(max = 3) String currency,
+        @Size(max = 16) String currency,
         @Size(max = 35) String lang,
         @Size(max = 512) String extsess,
         @Size(max = 2048) @JsonAlias("close_url") String closeUrl

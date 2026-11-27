@@ -16,5 +16,7 @@ export const paths = {
   privateTournament: '/tournaments/private',
   profile: '/profile',
   play: (variant: string) => `/play/${variant}`,
+  history: '/history',
+  variantHistory: (variant: string) => `/history/${encodeURIComponent(variant)}`,
   game: (gameId: string) => `/game/${gameId}`,
 } as const

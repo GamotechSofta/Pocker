@@ -22,6 +22,14 @@ export const appRouteObjects: RouteObject[] = [
         path: 'play/:variant',
         element: locked ? <Navigate to="/" replace /> : <PlayVariantPage />,
       },
+      {
+        path: 'history',
+        lazy: async () => ({ Component: (await import('@/pages/HistoryPage')).HistoryPage }),
+      },
+      {
+        path: 'history/:variant',
+        lazy: async () => ({ Component: (await import('@/pages/HistoryPage')).HistoryPage }),
+      },
       ...(tournamentsEnabled
         ? [
             { path: 'tournaments', lazy: async () => ({ Component: (await import('@/pages/TournamentPages')).TournamentLobbyPage }) },

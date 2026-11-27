@@ -151,17 +151,28 @@ public class AuthService {
         if (request == null) throw invalidLaunch("Launch request is required.");
         String token = launchValue(request.token(), "token", 2048, true);
         String partner = launchValue(request.partnerCode(), "partner_code", 128, true).toUpperCase(Locale.ROOT);
-        String gid = launchValue(request.gid(), "gid", 18, true);
+        String gid = launchValue(request.gid(), "gid", 32, true).replaceFirst("^0+(?=[1-9])", "");
         if (!gid.matches("[1-9][0-9]{0,17}")) throw invalidLaunch("gid must be a positive integer.");
         String gameCode = launchValue(request.gameCode(), "game_code", 128, true);
         String username = launchValue(request.username(), "username", 128, true);
         String userId = launchValue(request.userId(), "user_id", 256, false);
-        String currency = launchValue(request.currency(), "currency", 3, false);
-        currency = currency == null ? "INR" : currency.toUpperCase(Locale.ROOT);
-        if (!currency.matches("[A-Z]{3}")) throw invalidLaunch("currency must be a three-letter ISO code.");
+        String currency = launchValue(request.currency(), "currency", 16, false);
+        currency = currency == null ? "INR" : switch (currency.toUpperCase(Locale.ROOT)) {
+            case "₹", "RS", "RUPEE", "RUPEES" -> "INR";
+            default -> currency.toUpperCase(Locale.ROOT);
+        };
+        if (!currency.matches("[A-Z0-9]{2,12}")) throw invalidLaunch("currency must be an ISO code.");
         String lang = launchValue(request.lang(), "lang", 35, false);
-        lang = lang == null ? "en" : lang.toLowerCase(Locale.ROOT);
-        if (!lang.matches("[a-z]{2,8}(-[a-z0-9]{1,8})*")) throw invalidLaunch("lang must be a language tag.");
+        if (lang == null) {
+            lang = "en";
+        } else {
+            String normalizedLang = lang.replace('_', '-').toLowerCase(Locale.ROOT);
+            lang = switch (normalizedLang) {
+                case "english" -> "en";
+                case "hindi" -> "hi";
+                default -> normalizedLang.matches("[a-z]{2,8}(-[a-z0-9]{1,8})*") ? normalizedLang : "en";
+            };
+        }
         String extsess = launchValue(request.extsess(), "extsess", 512, false);
         String closeUrl = launchValue(request.closeUrl(), "close_url", 2048, false);
         if (closeUrl != null) {
