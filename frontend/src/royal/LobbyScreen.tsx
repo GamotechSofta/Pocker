@@ -478,9 +478,11 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
       enabled={false}
     >
       <div
-        className={`cr-shell ${currentPage === 'CONFIGURE_TABLE' ? 'cr-setup-backdrop' : 'cr-backdrop'}${
-          activeTheme ? ` cr-theme--${activeTheme}` : ''
-        }`}
+        className={`cr-shell ${
+          currentPage === 'CONFIGURE_TABLE' || (currentPage === 'INTRO' && activeTheme)
+            ? 'cr-setup-backdrop'
+            : 'cr-backdrop'
+        }${activeTheme ? ` cr-theme--${activeTheme}` : ''}`}
       >
         <header className="cr-topbar" style={{ display: currentPage === 'CONFIGURE_TABLE' ? 'none' : undefined }}>
           <div className="lobby-brand" title="Royal Poker">
@@ -572,33 +574,46 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
 
         <main className={`cr-main${currentPage === 'CONFIGURE_TABLE' || currentPage === 'INTRO' ? ' cr-main--center' : ''}`}>
           {currentPage === 'INTRO' && lockedArt && (
-            <div className="cr-intro">
-              <div className="cr-intro-head">
-                <h1>{variantTitle(lockedArt.id)}</h1>
-                <p>{lockedArt.tagline}</p>
-              </div>
-              <div className="cr-intro-preview">
-                <VariantBanner art={lockedArt} onSelect={() => selectVariant(lockedArt.id)} />
-              </div>
-              <button
-                type="button"
-                className="cr-btn-primary"
-                style={{ width: '100%' }}
-                onClick={() => selectVariant(lockedArt.id)}
-              >
-                ENTER {lockedArt.title.toUpperCase()} <span aria-hidden>→</span>
-              </button>
-              <div className="cr-intro-links">
-                {showTournamentsInApp() && (
-                  <Link className="cr-nav-btn cr-nav-btn--boxed" to={paths.tournaments}
+            <div className="cr-intro-stage">
+              <section className="cr-hero-stage cr-intro-hero">
+                <RoyalSpadeMedallion />
+
+                <div className="cr-hero-ribbon">
+                  <div className="cr-hero-eyebrow">
+                    <span aria-hidden>✦</span>
+                    <span>Welcome to Royal Poker</span>
+                    <span aria-hidden>✦</span>
+                  </div>
+                  <h1 className="cr-hero-title">{variantTitle(lockedArt.id)}</h1>
+                  <span className="cr-hero-gem" aria-hidden />
+                </div>
+              </section>
+
+              <div className="cr-intro">
+                <p className="cr-intro-tagline">{lockedArt.tagline}</p>
+                <div className="cr-intro-preview">
+                  <VariantBanner art={lockedArt} onSelect={() => selectVariant(lockedArt.id)} />
+                </div>
+                <button
+                  type="button"
+                  className="cr-btn-primary cr-intro-enter"
+                  onClick={() => selectVariant(lockedArt.id)}
+                >
+                  <span>ENTER {lockedArt.title.toUpperCase()}</span>
+                  <span aria-hidden>→</span>
+                </button>
+                <div className="cr-intro-links">
+                  {showTournamentsInApp() && (
+                    <Link className="cr-nav-btn cr-nav-btn--boxed" to={paths.tournaments}
+                      onClick={() => soundEngine.play('click')}>
+                      <Trophy size={15} aria-hidden="true" /> Tournaments
+                    </Link>
+                  )}
+                  <Link className="cr-nav-btn cr-nav-btn--boxed" to={paths.variantHistory(lockedArt.id)}
                     onClick={() => soundEngine.play('click')}>
-                    <Trophy size={15} aria-hidden="true" /> Tournaments
+                    <History size={15} aria-hidden="true" /> History
                   </Link>
-                )}
-                <Link className="cr-nav-btn cr-nav-btn--boxed" to={paths.variantHistory(lockedArt.id)}
-                  onClick={() => soundEngine.play('click')}>
-                  <History size={15} aria-hidden="true" /> History
-                </Link>
+                </div>
               </div>
             </div>
           )}
@@ -1000,7 +1015,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
           </div>
         )}
 
-        {currentPage === 'SELECT_VARIANT' && !isMatchmaking && (
+        {(currentPage === 'SELECT_VARIANT' || currentPage === 'INTRO') && !isMatchmaking && (
           <button
             type="button"
             className="cr-avatar-fab"
