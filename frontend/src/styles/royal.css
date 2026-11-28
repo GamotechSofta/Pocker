@@ -104,15 +104,29 @@ h1, h2, h3, h4, .font-display {
   position: relative;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .game-frame--board-only {
   padding: 0 !important;
-  background: #000;
+  gap: 0 !important;
+  background: #06090e;
 }
 
 .game-frame--board-only .casino-table-stage {
   border-radius: 0 !important;
   max-width: 100%;
   max-height: 100%;
+  box-shadow: none;
   /* Black bottom bar must touch stage L/R/B — no stage padding */
   padding: 0 !important;
 }
@@ -822,8 +836,8 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   position: absolute;
   inset: -4%;
   background: url('/royal-table-bg.jpg') center center / cover no-repeat;
-  filter: blur(18px) brightness(0.72);
-  transform: scale(1.04);
+  filter: blur(16px) brightness(0.95);
+  transform: scale(1.06);
   pointer-events: none;
   z-index: 0;
 }

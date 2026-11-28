@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../";
 
 /* Table look lives in styles/royal.css (Royal Rummy theme) and styles/royal-poker.css. */
 
