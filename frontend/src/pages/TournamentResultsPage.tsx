@@ -2,8 +2,11 @@ import { useCallback, useState, type ReactNode } from 'react'
 import { Medal, Trophy } from 'lucide-react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { fetchTournamentHistory, fetchTournamentResults, type HistoryFilter, type Standing } from '@/api/tournamentResults'
+import { lockedPokerVariant } from '@/config/variantApp'
 import { paths } from '@/constants/paths'
 import { useTournamentQuery } from '@/hooks/useTournamentQuery'
+import { variantThemeFor } from '@/royal/pokerVariants'
+import { useProfileStore } from '@/royal/profileStore'
 import { getAvatarForPlayer } from '@/utils/avatarUtils'
 import { displaySeatName } from '@/utils/seats'
 import '@/styles/tournaments.css'
@@ -21,8 +24,13 @@ function duration(value: number) {
   return [hours && `${hours}h`, minutes && `${minutes}m`, `${seconds % 60}s`].filter(Boolean).join(' ')
 }
 
-function Shell({ title, children }: { title: string; children: ReactNode }) {
-  return <main className="player-tournament-frame tournament-results-page">
+function Shell({ title, tournamentName, children }: { title: string; tournamentName?: string | null; children: ReactNode }) {
+  const lastVariant = useProfileStore((state) => state.lastConfig?.variant)
+  const theme =
+    variantThemeFor(lockedPokerVariant(), tournamentName) ??
+    variantThemeFor(lastVariant) ??
+    'emerald'
+  return <main className={`player-tournament-frame tournament-results-page cr-theme--${theme}`}>
     <div className="player-tournament-shell">
       <header className="tournament-standing-page-header">
         <Link className="player-tournament-button player-tournament-secondary" to={lobby}>Back to Lobby</Link>
@@ -67,7 +75,7 @@ export function TournamentResultsPage({ champion = false }: { champion?: boolean
     return <Navigate replace to={paths.tournamentResults(id)} />
   }
 
-  return <Shell title={champion && viewer?.position === 1 ? 'Tournament Champion' : 'Final Results'}>
+  return <Shell title={champion && viewer?.position === 1 ? 'Tournament Champion' : 'Final Results'} tournamentName={summary?.tournamentName}>
     <Feedback busy={query.busy && !data} error={query.error} retry={query.refresh} />
     {summary && data?.status === 'COMPLETED' && (champion && viewer?.position === 1 ?
       <section className="player-tournament-panel tournament-champion" aria-label="Official champion">
@@ -162,13 +170,16 @@ export function TournamentHistoryPage() {
         <button key={key} type="button" aria-pressed={filter === key} onClick={() => select(key)}>{label}</button>)}
     </nav>
     {data && (data.rows.length ? <ul className="tournament-history-list">
-      {data.rows.map(row => <li key={row.tournamentId} className="player-tournament-panel">
-        <HistoryBanner source={row.banner} />
-        <div><h2>{row.tournamentName}</h2>
-          <p>{format(row)} · {row.entrantCount} entrants</p>
-          <p>Final #{row.position} · {row.participationStatus === 'ELIMINATED' ? 'Eliminated' : 'Champion'} · {date(row.completedAt)}</p></div>
-        <Link className="player-tournament-button" to={paths.tournamentResults(row.tournamentId)}>View Results</Link>
-      </li>)}
+      {data.rows.map(row => {
+        const rowTheme = variantThemeFor(lockedPokerVariant(), row.tournamentName)
+        return <li key={row.tournamentId} className={`player-tournament-panel${rowTheme ? ` cr-theme--${rowTheme}` : ''}`}>
+          <HistoryBanner source={row.banner} />
+          <div><h2>{row.tournamentName}</h2>
+            <p>{format(row)} · {row.entrantCount} entrants</p>
+            <p>Final #{row.position} · {row.participationStatus === 'ELIMINATED' ? 'Eliminated' : 'Champion'} · {date(row.completedAt)}</p></div>
+          <Link className="player-tournament-button" to={paths.tournamentResults(row.tournamentId)}>View Results</Link>
+        </li>
+      })}
     </ul> : <p className="player-tournament-note">{stats?.completed === 0 ? 'You have no completed tournaments yet.' : 'No completed tournaments match this filter.'}</p>)}
     <Pagination page={page} total={data?.totalPages ?? 0} setPage={value => select(filter, value)} />
   </Shell>

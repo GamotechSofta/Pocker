@@ -5,7 +5,10 @@ import { ApiRequestError } from '@/api/errors'
 import { fetchTournamentResults } from '@/api/tournamentResults'
 import { fetchTournamentLeaderboard } from '@/api/tournaments'
 import { paths } from '@/constants/paths'
+import { lockedPokerVariant } from '@/config/variantApp'
 import { useTournamentQuery } from '@/hooks/useTournamentQuery'
+import { variantThemeFor } from '@/royal/pokerVariants'
+import { useProfileStore } from '@/royal/profileStore'
 import { displaySeatName } from '@/utils/seats'
 import { getAvatarForPlayer } from '@/utils/avatarUtils'
 import type { TournamentLeaderboard } from '@/types/tournamentLeaderboard'
@@ -70,8 +73,13 @@ export function TournamentLeaderboardPage({ elimination = false }: { elimination
   const data = query.data?.standings
   const viewer = data?.viewer
   const eliminated = elimination && viewer?.status === 'ELIMINATED'
+  const lastVariant = useProfileStore((state) => state.lastConfig?.variant)
+  const theme =
+    variantThemeFor(lockedPokerVariant(), data?.tournamentName) ??
+    variantThemeFor(lastVariant) ??
+    'emerald'
   if (query.data?.completed) return <Navigate replace to={paths.tournamentResults(id)} />
-  return <main className="player-tournament-frame tournament-standing-page">
+  return <main className={`player-tournament-frame tournament-standing-page cr-theme--${theme}`}>
     <div className="player-tournament-shell">
       <header className="tournament-standing-page-header">
         <Link className="player-tournament-button player-tournament-secondary" to={`${paths.tournaments}?section=mine`}>Back to Lobby</Link>

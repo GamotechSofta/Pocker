@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { RoyalCard } from '@/royal/RoyalCard'
 import { soundEngine } from '@/audio/soundEngine'
 
@@ -58,27 +59,38 @@ export function HeroHand({
               <span className="hand-group-count">{visible.length}</span>
             </div>
             <div className="hand-group-cards">
-              {visible.map((code, index) => (
-                <div
-                  key={`${code}-${index}`}
-                  className={`hand-card-slot${dealing ? ' deal-arrive-card' : ''}`}
-                  style={{ marginLeft: index === 0 ? 0 : 'var(--royal-hero-gap)' }}
-                >
-                  {selectable ? (
-                    <RoyalCard
-                      code={code}
-                      selected={selected.includes(index)}
-                      label={`${selected.includes(index) ? 'Keep' : 'Discard'} card ${index + 1}`}
-                      onClick={() => {
-                        soundEngine.play('select')
-                        onToggle(index)
-                      }}
-                    />
-                  ) : (
-                    <RoyalCard code={code} />
-                  )}
-                </div>
-              ))}
+              {visible.map((code, index) => {
+                const fanOffset = index - (visible.length - 1) / 2
+                const fanDeg = fanOffset * (visible.length <= 2 ? 3.8 : 2.8)
+                const fanDrop = Math.abs(fanOffset) * (visible.length <= 2 ? 1.5 : 2.2)
+                return (
+                  <div
+                    key={`${code}-${index}`}
+                    className={`hand-card-slot${dealing ? ' deal-arrive-card' : ''}`}
+                    style={
+                      {
+                        marginLeft: index === 0 ? 0 : 'var(--royal-hero-gap)',
+                        '--hero-fan-rot': `${fanDeg.toFixed(2)}deg`,
+                        '--hero-fan-y': `${fanDrop.toFixed(1)}px`,
+                      } as CSSProperties
+                    }
+                  >
+                    {selectable ? (
+                      <RoyalCard
+                        code={code}
+                        selected={selected.includes(index)}
+                        label={`${selected.includes(index) ? 'Keep' : 'Discard'} card ${index + 1}`}
+                        onClick={() => {
+                          soundEngine.play('select')
+                          onToggle(index)
+                        }}
+                      />
+                    ) : (
+                      <RoyalCard code={code} />
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}

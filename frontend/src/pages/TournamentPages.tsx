@@ -7,7 +7,10 @@ import {
   unregisterTournament, type TournamentAssignment, type TournamentCardData, type TournamentDetails, type TournamentInvitation, type TournamentStatus,
 } from '@/api/tournaments'
 import { paths } from '@/constants/paths'
+import { lockedPokerVariant } from '@/config/variantApp'
 import { useTournamentQuery } from '@/hooks/useTournamentQuery'
+import { variantThemeFor } from '@/royal/pokerVariants'
+import { useProfileStore } from '@/royal/profileStore'
 import '@/styles/tournaments.css'
 
 const sections = [
@@ -83,11 +86,24 @@ function registrationTime(tournament: TournamentCardData, now: string) {
   }
 }
 
-function TournamentFrame({ title, back, backLabel, actions, children }: {
-  title: string; back: string; backLabel: string; actions?: ReactNode; children: ReactNode
-}) {
+function useTournamentTheme(name?: string | null) {
+  const lastVariant = useProfileStore((state) => state.lastConfig?.variant)
+  const locked = lockedPokerVariant()
   return (
-    <main className="player-tournament-frame">
+    (locked ? variantThemeFor(locked) : null) ??
+    variantThemeFor(null, name) ??
+    variantThemeFor(lastVariant) ??
+    'emerald'
+  )
+}
+
+function TournamentFrame({ title, back, backLabel, actions, theme, children }: {
+  title: string; back: string; backLabel: string; actions?: ReactNode; theme?: string | null; children: ReactNode
+}) {
+  const fallbackTheme = useTournamentTheme(title)
+  const activeTheme = theme ?? fallbackTheme
+  return (
+    <main className={`player-tournament-frame cr-theme--${activeTheme}`}>
       <div className="player-tournament-shell">
         <header className="player-tournament-header">
           <Link className="player-tournament-button player-tournament-secondary" to={back}>
@@ -166,8 +182,9 @@ function Feedback({ busy, error, empty, refresh }: {
 }
 
 function TournamentCard({ tournament: t, now, back }: { tournament: TournamentCardData; now: string; back: string }) {
+  const cardTheme = variantThemeFor(lockedPokerVariant(), t.name)
   return (
-    <article className="player-tournament-card">
+    <article className={`player-tournament-card${cardTheme ? ` cr-theme--${cardTheme}` : ''}`}>
       <Banner source={t.banner} />
       <div className="player-tournament-card-body">
         <div className="player-tournament-card-heading"><h2>{t.name}</h2><Status status={t.status} /></div>
@@ -497,8 +514,13 @@ export function TournamentPreparationPage() {
   }, [assignment?.stage, id, liveTable, navigate])
 
   return (
-    <TournamentFrame title="Tournament Table Preparation" back={back} backLabel="Back to Lobby"
-      actions={<Refresh busy={query.busy} onClick={query.refresh} />}>
+    <TournamentFrame
+      title="Tournament Table Preparation"
+      back={back}
+      backLabel="Back to Lobby"
+      theme={variantThemeFor(lockedPokerVariant(), assignment?.tournamentName)}
+      actions={<Refresh busy={query.busy} onClick={query.refresh} />}
+    >
       <Feedback busy={query.busy && !assignment} error={query.error} refresh={query.refresh} />
       {assignment && (
         <div className="player-tournament-detail">
@@ -576,8 +598,13 @@ export function TournamentWaitingRoomPage() {
   }
 
   return (
-    <TournamentFrame title="Waiting Room" back={back} backLabel="Back to Lobby"
-      actions={<Refresh busy={query.busy} onClick={query.refresh} />}>
+    <TournamentFrame
+      title="Waiting Room"
+      back={back}
+      backLabel="Back to Lobby"
+      theme={variantThemeFor(lockedPokerVariant(), t?.name)}
+      actions={<Refresh busy={query.busy} onClick={query.refresh} />}
+    >
       <Feedback busy={query.busy && !room} error={query.error} refresh={query.refresh} />
       {room && t && (
         <div className="player-tournament-detail">

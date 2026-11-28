@@ -1,7 +1,8 @@
 :root {
-  --font-sans: 'Outfit', 'Segoe UI', system-ui, sans-serif;
-  --font-display: 'Outfit', var(--font-sans);
-  --font-royal: 'Cinzel', 'Times New Roman', serif;
+  --font-sans: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', var(--font-sans);
+  --font-royal: 'Cinzel', Georgia, serif;
+  --font-card: 'Oswald', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
 
   --bg-dark: #06090e;
   --bg-card: rgba(15, 23, 42, 0.75);
@@ -40,8 +41,8 @@
   --actions-h: clamp(56px, 12vh, 110px);
   /* Dealer BG intrinsic ratio (top-view oval ≈ 1746×901) */
   --table-ar: 1.938;
-  /* Big screens: the table stops growing and sits centered with space on the sides */
-  --table-max-w: 1360px;
+  /* Scale table smoothly up to full container width without letterbox black bars */
+  --table-max-w: 100cqw;
   /* Clip deal flights below painted dealer torso/shoulders */
   --dealer-safe-top: 22%;
 }
@@ -202,7 +203,7 @@ h1, h2, h3, h4, .font-display {
 .tournament-blind-structure tr[aria-current] { color: #f9d783; }
 
 .game-frame--tournament .table-perimeter-seats .opponent-seat-pod:is(.pos-top-left, .pos-top-right) {
-  top: 17%;
+  top: 22.5%;
 }
 
 .tournament-game-hud strong {
@@ -224,26 +225,26 @@ h1, h2, h3, h4, .font-display {
 
 @container table-stage (width < 900px) {
   .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-top-left {
-    top: 23%;
-    left: 28%;
+    top: 22.5%;
+    left: 29.5%;
   }
 
   .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-top-right {
-    top: 23%;
-    left: 69%;
+    top: 22.5%;
+    left: 70.5%;
   }
 
   .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-right {
-    top: 35%;
+    top: 46%;
   }
 
   .game-frame--tournament .table-perimeter-seats .opponent-seat-pod.pos-bottom-right {
-    top: 69%;
+    top: 70.5%;
   }
 }
 
 body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponent-seat-pod:is(.pos-top-left, .pos-top-right) {
-  top: 23%;
+  top: 22.5%;
 }
 
 @container table-stage (width < 710px) {
@@ -270,7 +271,7 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  max-width: calc(100vw - 230px);
+  max-width: calc(100% - 165px);
   display: flex;
   align-items: center;
   flex-shrink: 1;
@@ -288,11 +289,19 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 .board-info-variant {
   display: inline-flex;
   align-items: center;
-  font-size: clamp(10px, 0.85vw, 12.5px);
-  font-weight: 650;
-  color: #e8edf2;
-  letter-spacing: 0.01em;
+  gap: 0.25em;
+  font-family: var(--font-sans);
+  font-size: clamp(10px, min(1.02cqw, 2.05cqh), 13px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #cbd5e1;
+  letter-spacing: 0.015em;
   white-space: nowrap;
+}
+
+.board-info-variant-title {
+  font-weight: 750;
+  color: #ffffff;
 }
 
 .board-info-sep {
@@ -306,13 +315,15 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   display: inline-flex;
   align-items: center;
   color: #fef08a;
+  font-family: var(--font-sans);
   font-weight: 800;
-  font-size: clamp(9.5px, 0.75vw, 11px);
-  letter-spacing: 0.4px;
+  font-size: clamp(9px, min(0.92cqw, 1.8cqh), 11.5px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
   background: rgba(251, 191, 36, 0.15);
   border: 1px solid rgba(251, 191, 36, 0.35);
   border-radius: 5px;
-  padding: 1px clamp(4px, 0.4vw, 6px);
+  padding: 2px clamp(5px, 0.55cqw, 8px);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -322,9 +333,11 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 }
 
 .board-info-pot {
-  font-size: clamp(10.5px, 0.85vw, 12.5px);
+  font-family: var(--font-sans);
+  font-size: clamp(10px, min(1.02cqw, 2.05cqh), 13px);
   font-weight: 750;
-  color: #f5d76e;
+  font-variant-numeric: tabular-nums;
+  color: #fde68a;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -333,7 +346,8 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: clamp(9.5px, 0.75vw, 11px);
+  font-family: var(--font-sans);
+  font-size: clamp(9px, min(0.92cqw, 1.8cqh), 11.5px);
   font-weight: 700;
   color: #f0c14b;
   margin-left: 1px;
@@ -353,7 +367,7 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 
 @media (max-width: 720px) {
   .board-info-plate {
-    max-width: calc(100vw - 200px);
+    max-width: calc(100% - 140px);
     padding: 3px 8px;
   }
   .board-info-row {
@@ -381,8 +395,12 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
     display: none;
   }
   .board-info-plate {
-    max-width: calc(100vw - 165px);
+    max-width: calc(100% - 120px);
   }
+}
+
+:is(body.simulated-landscape, body.mobile-landscape-play) .board-info-plate {
+  max-width: calc(100% - 135px);
 }
 
 .board-hud-right {
@@ -779,7 +797,7 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   animation: coachIn 0.2s ease-out;
 }
 
-/* Letterbox shell — solid black L/R (and T/B) around the fitted board */
+/* Full-bleed luxury casino room backdrop — seamlessly extends around fitted aspect stage */
 .casino-table {
   position: relative;
   flex: 1 1 auto;
@@ -789,7 +807,7 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   margin: 0;
   padding: 0;
   border-radius: 0;
-  background: #000;
+  background: #080b10;
   box-shadow: none;
   overflow: hidden;
   display: flex;
@@ -799,12 +817,24 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   container-name: table-shell;
 }
 
+.casino-table::before {
+  content: '';
+  position: absolute;
+  inset: -4%;
+  background: url('/royal-table-bg.jpg') center center / cover no-repeat;
+  filter: blur(18px) brightness(0.72);
+  transform: scale(1.04);
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* Aspect-fit stage: full image visible, UI coords match BG */
 .casino-table-stage {
   position: relative;
+  z-index: 1;
   aspect-ratio: var(--table-ar);
-  width: min(100cqw, calc(100cqh * var(--table-ar)), var(--table-max-w));
-  height: min(100cqh, calc(100cqw / var(--table-ar)), calc(var(--table-max-w) / var(--table-ar)));
+  width: min(100cqw, calc(100cqh * var(--table-ar)));
+  height: min(100cqh, calc(100cqw / var(--table-ar)));
   max-width: 100%;
   max-height: 100%;
   border-radius: 0;
@@ -814,12 +844,31 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   justify-content: flex-start;
   /* No side/bottom padding — bottom navbar runs edge-to-edge */
   padding: 0;
-  background: #040c07 url('/table-board.webp') no-repeat center center;
+  background: #080b10 url('/royal-table-bg.jpg') no-repeat center center;
   background-size: 100% 100%;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 0 54px 18px rgba(4, 7, 10, 0.72);
   /* Children size against this fitted image box */
   container-type: size;
   container-name: table-stage;
+}
+
+.casino-table-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(6, 9, 13, 0.36) 0%, transparent 3.2%, transparent 96.8%, rgba(6, 9, 13, 0.36) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dealer-rig-canvas {
+  position: absolute;
+  left: 41.27907%;
+  top: 2.53521%;
+  width: 17.44186%;
+  height: 43.09859%;
+  z-index: 2;
+  pointer-events: none;
 }
 
 /* Scale all board UI from the fitted stage (not the letterbox shell) */
@@ -834,20 +883,20 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   --card-overlap: calc(var(--card-w) * -0.62);
   --hand-card-w: var(--card-w);
   --hand-card-h: var(--card-h);
-  --ui-font: clamp(8px, min(1.1cqw, 2.2cqh), 13px);
-  --ui-font-sm: clamp(7px, min(0.9cqw, 1.8cqh), 11px);
+  --ui-font: clamp(10px, min(1.12cqw, 2.25cqh), 13.5px);
+  --ui-font-sm: clamp(8.5px, min(0.95cqw, 1.9cqh), 11.5px);
   --ui-gap: clamp(4px, min(1.4cqw, 2.4cqh), 18px);
   --bar-pad-y: clamp(4px, 1.2cqh, 12px);
   --bar-pad-x: clamp(6px, 1.2cqw, 16px);
   --bar-btn-h: clamp(28px, min(5.5cqh, 7cqw), 48px);
-  --seat-avatar: clamp(28px, min(4.2cqw, 8cqh), 56px);
+  --seat-avatar: clamp(34px, min(5cqw, 9.2cqh), 64px);
   --bcb-avatar: clamp(32px, min(5cqw, 9cqh), 56px);
   --bcb-icon: clamp(13px, min(1.7cqw, 3.2cqh), 18px);
 }
 
 /* Center piles stay the desktop layout, just a bit larger, on every screen */
 .casino-table-stage > .table-center-wrap {
-  --card-w: clamp(26px, min(4.2cqw, 7.6cqh), 52px);
+  --card-w: clamp(23px, min(4.2cqw, 7.6cqh), 52px);
 }
 
 /* Center Table Pot Badge */
@@ -855,24 +904,26 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 16px;
+  padding: clamp(3px, 0.55cqh, 5px) clamp(11px, 1.3cqw, 16px);
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(20, 32, 24, 0.92), rgba(10, 18, 14, 0.96));
+  background: linear-gradient(135deg, rgba(20, 32, 24, 0.94), rgba(10, 18, 14, 0.97));
   border: 1px solid rgba(212, 175, 55, 0.5);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.65), inset 0 0 10px rgba(212, 175, 55, 0.2);
   color: var(--gold-light);
-  font-size: 11px;
+  font-family: var(--font-sans);
+  font-size: clamp(10.5px, min(1.14cqw, 2.25cqh), 14px);
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
-  margin: 0 auto 10px;
+  margin: 0 auto clamp(6px, 1cqh, 10px);
   z-index: 10;
 }
 
 .table-center-wrap {
   position: absolute;
   left: 50%;
-  /* Mid-felt, slight gap above group cards */
-  top: 51%;
+  /* Below dealer hands/deck with clear gap above player hand */
+  top: 54%;
   transform: translate(-50%, -50%);
   z-index: 10;
   margin: 0;
@@ -1063,17 +1114,18 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 }
 
 .deck-pod-label {
-  font-size: var(--ui-font-sm, 10px);
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-size: clamp(8.5px, min(0.92cqw, 1.8cqh), 11.5px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #f7f3ea;
   white-space: nowrap;
   line-height: 1.2;
-  padding: 2px 8px;
+  padding: clamp(2px, 0.35cqh, 3.5px) clamp(7px, 0.85cqw, 10px);
   border-radius: 999px;
   background: rgba(6, 10, 8, 0.88);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .deck-closed {
@@ -1113,8 +1165,8 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   width: calc(var(--card-w) * 1.02);
   height: calc(var(--card-h) * 1.02);
   border-radius: calc(var(--card-w) * 0.1);
-  border: none;
-  background: #c40000 url("/card-back.webp") center / cover no-repeat;
+  border: 1px solid rgba(255, 250, 240, 0.8);
+  background: #610a14 url("/royal-card-back.png") center / cover no-repeat;
 }
 
 .deck-closed-layer--1 {
@@ -1824,23 +1876,29 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 
 .avatar-status-badge {
   position: absolute;
-  top: -9px;
+  top: -7px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 35;
   white-space: nowrap;
-  font-family: inherit;
-  font-size: clamp(8px, 1.3cqw, 9.5px);
-  font-weight: 900;
-  letter-spacing: 0.6px;
+  font-family: var(--font-sans);
+  font-size: clamp(7.5px, min(0.84cqw, 1.65cqh), 9.5px);
+  font-weight: 850;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 2px 7.5px;
+  padding: 2px 7px;
   border-radius: 9999px;
   pointer-events: none;
   user-select: none;
   line-height: 1.1;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.75);
   animation: badgePopIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.bcb-avatar-wrap .avatar-status-badge {
+  top: -4px;
+  font-size: clamp(7.5px, min(0.78cqw, 1.5cqh), 9px);
+  padding: 1.5px 6px;
 }
 
 @keyframes badgePopIn {
@@ -2031,54 +2089,54 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
  * % is relative to .casino-table-stage so they track the table at any size.
  */
 .opponent-seat-pod.pos-top-center {
-  top: 15%;
+  top: 18%;
   left: 50%;
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -50%);
 }
 
 .opponent-seat-pod.pos-top {
-  top: 15%;
+  top: 18%;
   left: 50%;
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -50%);
 }
 
 .opponent-seat-pod.pos-top-left {
-  top: 13%;
-  left: 22%;
-  transform: translate(-50%, 0);
+  top: 22.5%;
+  left: 29.5%;
+  transform: translate(-50%, -50%);
 }
 
 .opponent-seat-pod.pos-top-right {
-  top: 12%;
-  left: 73%;
+  top: 22.5%;
+  left: 70.5%;
   right: auto;
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -50%);
 }
 
 .opponent-seat-pod.pos-left {
-  top: 44%;
-  left: 2.5%;
-  transform: translateY(-50%);
+  top: 50%;
+  left: 14.5%;
+  transform: translate(-50%, -50%);
 }
 
 .opponent-seat-pod.pos-right {
-  top: 35%;
-  right: 3%;
-  left: auto;
-  transform: translateY(-50%);
+  top: 46%;
+  left: 85.5%;
+  right: auto;
+  transform: translate(-50%, -50%);
 }
 
 .opponent-seat-pod.pos-bottom-left {
-  top: 76%;
-  left: 14%;
+  top: 71.5%;
+  left: 19.5%;
   transform: translate(-50%, -50%);
 }
 
 .opponent-seat-pod.pos-bottom-right {
-  top: 58%;
-  right: 3%;
-  left: auto;
-  transform: translateY(-50%);
+  top: 70.5%;
+  left: 80.5%;
+  right: auto;
+  transform: translate(-50%, -50%);
 }
 
 .opponent-waiting-pod {
@@ -2400,9 +2458,11 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   display: flex;
   align-items: baseline;
   gap: 0.4em;
+  font-family: var(--font-sans);
   font-size: var(--ui-font, 13px);
-  font-weight: 700;
-  color: #f3f4f6;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  color: #f8fafc;
   white-space: nowrap;
 }
 
@@ -2417,8 +2477,11 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   display: flex;
   align-items: center;
   gap: 0.45em;
+  font-family: var(--font-sans);
   font-size: var(--ui-font-sm, 11px);
-  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #cbd5e1;
   white-space: nowrap;
 }
 
@@ -2959,13 +3022,22 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 
 /* ========== CARDS ========== */
 .rummy-card {
-  --card-pad: max(2px, calc(var(--card-w, 48px) * 0.06));
+  --card-pad: max(2px, calc(var(--card-w, 48px) * 0.065));
   width: var(--card-w);
   height: var(--card-h);
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  border-radius: clamp(5px, calc(var(--card-w, 48px) * 0.12), 8px);
-  border: 1px solid rgba(0, 0, 0, 0.16);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.15);
+  background:
+    repeating-linear-gradient(0deg, rgba(130, 110, 82, 0.025) 0 1px, transparent 1px 2.5px),
+    repeating-linear-gradient(90deg, rgba(130, 110, 82, 0.025) 0 1px, transparent 1px 2.5px),
+    linear-gradient(166deg, #fffefb 0%, #faf6ec 56%, #efe8d8 100%);
+  border-radius: clamp(5px, calc(var(--card-w, 48px) * 0.115), 8px);
+  border: 1px solid rgba(42, 32, 18, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.94),
+    inset 0 0 5px rgba(175, 152, 114, 0.14),
+    0 1px 0 #d5ccb8,
+    0 2px 0 #b3a790,
+    0 4px 8px rgba(0, 0, 0, 0.48),
+    0 12px 22px rgba(0, 0, 0, 0.34);
   user-select: none;
   cursor: pointer;
   display: block;
@@ -2979,11 +3051,11 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 }
 
 .rummy-card.is-red {
-  color: var(--card-red);
+  color: #c8102e;
 }
 
 .rummy-card.is-black {
-  color: var(--card-black);
+  color: #111620;
 }
 
 .rummy-card--small {
@@ -3075,21 +3147,32 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 }
 
 .card-corner-rank {
-  font-weight: 900;
-  font-size: 1.12em;
-  line-height: 0.95;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-card);
+  font-weight: 700;
+  font-size: 1.14em;
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .card-corner-rank--wide {
-  font-size: 0.92em;
-  letter-spacing: -0.06em;
+  font-size: 1.04em;
+  letter-spacing: -0.07em;
 }
 
 .card-corner-suit {
-  font-size: 1.38em;
-  line-height: 0.92;
-  margin-top: 0.04em;
+  width: 0.82em;
+  height: 0.82em;
+  margin-top: 0.1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-suit-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .card-center-pip {
@@ -3097,11 +3180,102 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 1.7em;
-  opacity: 0.88;
+  width: 1.65em;
+  height: 1.65em;
+  opacity: 0.94;
   line-height: 1;
   pointer-events: none;
   z-index: 1;
+}
+
+.card-pip-grid {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  top: 13%;
+  bottom: 13%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.card-pip-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 0.94em;
+  height: 0.94em;
+  line-height: 1;
+  opacity: 0.96;
+}
+
+.card-pip-dot.is-flipped {
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
+.card-ace-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.card-ace-pip {
+  width: 2.15em;
+  height: 2.15em;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.14));
+}
+
+.card-ace-center--spade .card-ace-pip {
+  width: 2.35em;
+  height: 2.35em;
+}
+
+.card-ace-wreath {
+  position: absolute;
+  width: 72%;
+  height: 62%;
+  pointer-events: none;
+}
+
+.card-court-frame {
+  position: absolute;
+  inset: 15% 19%;
+  border: 1px solid rgba(182, 135, 40, 0.72);
+  border-radius: 3px;
+  background: #fcf8ed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.card-court-emblem {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.card-court-corner {
+  position: absolute;
+  width: 0.56em;
+  height: 0.56em;
+  opacity: 0.9;
+  z-index: 2;
+}
+
+.card-court-corner--tl {
+  top: 2px;
+  left: 2px;
+}
+
+.card-court-corner--br {
+  bottom: 2px;
+  right: 2px;
+  transform: rotate(180deg);
 }
 
 .card-wild-badge {
@@ -3133,9 +3307,11 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   width: var(--card-w);
   height: var(--card-h);
   border-radius: 6px;
-  border: none;
-  background: #c40000 url("/card-back.webp") center / cover no-repeat;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 250, 240, 0.85);
+  background: #610a14 url("/royal-card-back.png") center / cover no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 250, 238, 0.55),
+    0 6px 14px rgba(0, 0, 0, 0.55);
   position: relative;
   overflow: hidden;
   display: flex;
@@ -3147,36 +3323,59 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   content: none;
 }
 
-/* Opponent 13-Card Fan Visual */
+/* Opponent Pocket Card Fan Visual */
 .opponent-card-fan {
+  --fan-card-w: clamp(19px, 2.2cqw, 28px);
+  --fan-card-h: calc(var(--fan-card-w) * 1.4);
   position: relative;
-  width: clamp(36px, 4.2cqw, 52px);
-  height: clamp(28px, 3.2cqw, 38px);
+  width: clamp(46px, 5.2cqw, 66px);
+  height: clamp(32px, 3.6cqw, 44px);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .opponent-fan-card {
   position: absolute;
-  width: clamp(16px, 1.8cqw, 22px);
-  height: clamp(24px, 2.6cqw, 32px);
-  border-radius: 2px;
-  border: none;
-  background: #c40000 url("/card-back.webp") center / cover no-repeat;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-  transform-origin: bottom center;
+  left: 50%;
+  top: 0;
+  width: var(--fan-card-w);
+  height: var(--fan-card-h);
+  margin-left: calc(var(--fan-card-w) * -0.5);
+  border-radius: 3.5px;
+  border: 1px solid rgba(255, 250, 240, 0.88);
+  background: #610a14 url("/royal-card-back.png") center / cover no-repeat;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.45),
+    0 3px 7px rgba(0, 0, 0, 0.6);
+  transform-origin: center 82%;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: opponentCardSplit 0.28s cubic-bezier(0.18, 0.85, 0.3, 1.15) backwards;
 }
+
+@keyframes opponentCardSplit {
+  from {
+    opacity: 0;
+    filter: brightness(1.18);
+  }
+  to {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
 .opponent-fan-count {
   position: absolute;
   bottom: -6px;
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid var(--border-gold);
-  color: var(--gold-light);
-  font-size: 9px;
-  font-weight: 800;
-  padding: 1px 7px;
+  background: rgba(14, 11, 9, 0.94);
+  border: 1px solid rgba(212, 175, 55, 0.65);
+  color: #fde68a;
+  font-family: var(--font-sans);
+  font-size: clamp(8px, min(0.84cqw, 1.65cqh), 10.5px);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  padding: 1px clamp(6px, 0.65cqw, 8px);
   border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.65);
   z-index: 10;
   white-space: nowrap;
 }
@@ -3243,10 +3442,15 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 }
 
 .dropped-hand-label {
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  color: #e8c4bc;
+  font-family: var(--font-sans);
+  font-size: clamp(9.5px, min(1.02cqw, 2cqh), 12px);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #f3dad4;
+  padding: 2px clamp(8px, 0.9cqw, 12px);
+  border-radius: 999px;
+  background: rgba(6, 12, 9, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .dropped-hand-row {
@@ -3357,19 +3561,22 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 }
 
 .player-hand-tray .card-corner-rank {
-  font-size: 1.18em;
-  font-weight: 900;
+  font-family: var(--font-card);
+  font-size: 1.14em;
+  font-weight: 700;
   line-height: 0.92;
+  letter-spacing: -0.02em;
 }
 
 .player-hand-tray .card-corner-rank--wide {
-  font-size: 0.96em;
+  font-size: 1.04em;
+  letter-spacing: -0.07em;
 }
 
 .player-hand-tray .card-corner-suit {
-  font-size: 1.48em;
-  line-height: 0.88;
-  margin-top: 0.04em;
+  width: 0.85em;
+  height: 0.85em;
+  margin-top: 0.1em;
 }
 
 .player-hand-tray .rummy-card {
@@ -3434,9 +3641,11 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   width: var(--card-w);
   height: var(--card-h);
   border-radius: 6px;
-  border: none;
-  background: #c40000 url("/card-back.webp") center / cover no-repeat;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 250, 240, 0.85);
+  background: #610a14 url("/royal-card-back.png") center / cover no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 250, 238, 0.55),
+    0 3px 10px rgba(0, 0, 0, 0.48);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3683,19 +3892,18 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   }
 }
 
-/* One card at a time, clockwise, from the dealer's hands to each seat. */
+/* One card at a time, peeled cleanly off the deck and pitched across felt to each seat. */
 .deal-fly-card {
   position: absolute;
   width: calc(var(--card-w) * 0.78);
   height: calc(var(--card-h) * 0.78);
   margin-left: calc(var(--card-w) * -0.39);
-  /* Start just below hands / on the felt */
-  margin-top: 6px;
+  margin-top: calc(var(--card-h) * -0.39);
   z-index: 41;
   opacity: 0;
-  transform-origin: 50% 0%;
+  transform-origin: center center;
   animation-name: dealFly;
-  animation-timing-function: cubic-bezier(0.22, 0.65, 0.28, 1);
+  animation-timing-function: cubic-bezier(0.2, 0.72, 0.25, 1);
   animation-fill-mode: both;
   will-change: transform, opacity;
 }
@@ -3704,7 +3912,10 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
   width: 100% !important;
   height: 100% !important;
   border-radius: 5px !important;
-  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.6) !important;
+  border: 1px solid rgba(255, 250, 240, 0.92) !important;
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.65),
+    0 2px 5px rgba(0, 0, 0, 0.45) !important;
 }
 
 .deal-fly-face::after {
@@ -3713,24 +3924,24 @@ body.simulated-landscape .game-frame--tournament .table-perimeter-seats .opponen
 
 @keyframes dealFly {
   0% {
-    opacity: 0;
-    transform: translate(0, 6px) rotate(0deg) scale(0.62);
-  }
-  12% {
     opacity: 1;
-    transform: translate(0, 14px) rotate(var(--deal-rot-mid)) scale(0.9);
+    transform: perspective(520px) translate(0, 0) rotate(0deg) rotateX(22deg) scale(0.56);
   }
-  46% {
+  18% {
     opacity: 1;
-    transform: translate(var(--deal-mx), var(--deal-my)) rotate(var(--deal-rot)) scale(0.92);
+    transform: perspective(520px) translate(var(--deal-split-x), var(--deal-split-y)) rotate(var(--deal-rot-split)) rotateX(12deg) rotateY(calc(var(--deal-dir, 0) * -14deg)) scale(0.76);
   }
-  82% {
+  54% {
     opacity: 1;
-    transform: translate(var(--deal-dx), var(--deal-dy)) rotate(var(--deal-rot)) scale(0.78);
+    transform: perspective(520px) translate(var(--deal-mx), var(--deal-my)) rotate(var(--deal-rot-mid)) scale(0.95);
+  }
+  86% {
+    opacity: 1;
+    transform: perspective(520px) translate(var(--deal-dx), var(--deal-dy)) rotate(var(--deal-rot)) scale(0.78);
   }
   100% {
     opacity: 0;
-    transform: translate(var(--deal-dx), var(--deal-dy)) rotate(var(--deal-rot)) scale(0.6);
+    transform: perspective(520px) translate(var(--deal-dx), var(--deal-dy)) rotate(var(--deal-rot)) scale(0.66);
   }
 }
 
@@ -8734,40 +8945,46 @@ body.mobile-landscape-play .stake-nav--mobile {
 @media (orientation: landscape) and (max-height: 500px) {
   .opponent-seat-pod.pos-top-center,
   .opponent-seat-pod.pos-top {
-    top: 12%;
+    top: 18%;
   }
 
   .opponent-seat-pod.pos-top-left {
-    top: 11%;
-    left: 20%;
-    transform: translate(-50%, 0);
+    top: 22.5%;
+    left: 29.5%;
+    transform: translate(-50%, -50%);
   }
 
   .opponent-seat-pod.pos-top-right {
-    top: 10%;
-    left: 74%;
-    transform: translate(-50%, 0);
+    top: 22.5%;
+    left: 70.5%;
+    right: auto;
+    transform: translate(-50%, -50%);
   }
 
   .opponent-seat-pod.pos-left {
-    top: 44%;
+    top: 50%;
+    left: 14.5%;
+    transform: translate(-50%, -50%);
   }
 
   .opponent-seat-pod.pos-right {
-    top: 35%;
-    right: 3%;
-    left: auto;
+    top: 46%;
+    left: 85.5%;
+    right: auto;
+    transform: translate(-50%, -50%);
   }
 
   .opponent-seat-pod.pos-bottom-left {
-    top: 74%;
+    top: 71.5%;
+    left: 19.5%;
+    transform: translate(-50%, -50%);
   }
 
   .opponent-seat-pod.pos-bottom-right {
-    top: 58%;
-    right: 3%;
-    left: auto;
-    transform: translateY(-50%);
+    top: 70.5%;
+    left: 80.5%;
+    right: auto;
+    transform: translate(-50%, -50%);
   }
 
   .opponent-waiting-pod {
@@ -8775,7 +8992,7 @@ body.mobile-landscape-play .stake-nav--mobile {
   }
 
   .table-center-wrap {
-    top: 51%;
+    top: 54%;
     margin: 0;
     padding: 0;
   }
@@ -8783,40 +9000,46 @@ body.mobile-landscape-play .stake-nav--mobile {
 
 body.simulated-landscape .opponent-seat-pod.pos-top-center,
 body.simulated-landscape .opponent-seat-pod.pos-top {
-  top: 12%;
+  top: 18%;
 }
 
 body.simulated-landscape .opponent-seat-pod.pos-top-left {
-  top: 11%;
-  left: 20%;
-  transform: translate(-50%, 0);
+  top: 22.5%;
+  left: 29.5%;
+  transform: translate(-50%, -50%);
 }
 
 body.simulated-landscape .opponent-seat-pod.pos-top-right {
-  top: 10%;
-  left: 74%;
-  transform: translate(-50%, 0);
+  top: 22.5%;
+  left: 70.5%;
+  right: auto;
+  transform: translate(-50%, -50%);
 }
 
 body.simulated-landscape .opponent-seat-pod.pos-left {
-  top: 44%;
+  top: 50%;
+  left: 14.5%;
+  transform: translate(-50%, -50%);
 }
 
 body.simulated-landscape .opponent-seat-pod.pos-right {
-  top: 35%;
-  right: 3%;
-  left: auto;
+  top: 46%;
+  left: 85.5%;
+  right: auto;
+  transform: translate(-50%, -50%);
 }
 
 body.simulated-landscape .opponent-seat-pod.pos-bottom-left {
-  top: 74%;
+  top: 71.5%;
+  left: 19.5%;
+  transform: translate(-50%, -50%);
 }
 
 body.simulated-landscape .opponent-seat-pod.pos-bottom-right {
-  top: 58%;
-  right: 3%;
-  left: auto;
-  transform: translateY(-50%);
+  top: 70.5%;
+  left: 80.5%;
+  right: auto;
+  transform: translate(-50%, -50%);
 }
 
 body.simulated-landscape .opponent-waiting-pod {
@@ -8824,7 +9047,7 @@ body.simulated-landscape .opponent-waiting-pod {
 }
 
 body.simulated-landscape .table-center-wrap {
-  top: 51%;
+  top: 54%;
   margin: 0;
   padding: 0;
 }
@@ -8836,6 +9059,23 @@ body.simulated-landscape {
   --header-h: 36px;
   --actions-h: clamp(48px, 16vh, 80px);
   --frame-pad: 4px;
+}
+
+body.simulated-landscape .bottom-control-bar {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: clamp(4px, 0.9cqw, 10px);
+  padding: 5px 10px;
+}
+
+body.simulated-landscape .bcb-tool {
+  padding: 4px 6px;
+  font-size: clamp(9.5px, 1.3cqw, 11.5px);
+}
+
+body.simulated-landscape .bcb-action {
+  min-height: clamp(28px, 6cqh, 36px);
+  padding: 0 clamp(7px, 1.2cqw, 14px);
+  font-size: clamp(10px, 1.4cqw, 12px);
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
@@ -8967,7 +9207,7 @@ body.simulated-landscape {
   }
 
   .table-center-wrap {
-    top: 51%;
+    top: 54%;
     margin: 0;
     max-height: none;
   }
@@ -8993,8 +9233,20 @@ body.simulated-landscape {
   }
 
   .bottom-control-bar {
-    gap: 4px;
-    padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px));
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: clamp(4px, 0.9cqw, 10px);
+    padding: 5px 10px max(6px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .bcb-tool {
+    padding: 4px 6px;
+    font-size: clamp(9.5px, 1.3cqw, 11.5px);
+  }
+
+  .bcb-action {
+    min-height: clamp(28px, 6cqh, 36px);
+    padding: 0 clamp(7px, 1.2cqw, 14px);
+    font-size: clamp(10px, 1.4cqw, 12px);
   }
 
   .bottom-bar-btn {
@@ -9016,12 +9268,13 @@ body.simulated-landscape {
 
   .board-info-variant,
   .board-info-pot {
-    font-size: 11px;
+    font-size: clamp(9.5px, 2.2cqh, 11.5px);
   }
 
   .opponent-seat-pod.pos-left {
-    top: 44%;
-    left: 2.5%;
+    top: 50%;
+    left: 14.5%;
+    transform: translate(-50%, -50%);
   }
 
   .action-bar-coach {

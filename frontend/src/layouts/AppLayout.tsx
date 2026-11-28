@@ -13,18 +13,37 @@ export function AppLayout() {
 
   if (!ready) {
     return (
-      <div className="app-frame" style={{ display: 'grid', placeItems: 'center', color: '#f8fafc' }}>
-        <div style={{ textAlign: 'center', fontSize: 13 }}>
-          <RoyalPokerLogo size="lg" />
-          {failed ? (
-            <>
-              <p role="alert">{message || 'Could not start your play session.'}</p>
-              {!blocked && <button type="button" onClick={retry} style={{ color: '#f8fafc', textDecoration: 'underline' }}>Try again</button>}
-              {(launch || blocked || closeUrl) && <button type="button" onClick={() => exitOperatorGame(closeUrl)} style={{ color: '#f8fafc', marginLeft: 16 }}>Return to lobby</button>}
-            </>
-          ) : (
-            <p role="status" style={{ marginTop: 18, color: '#94a3b8' }}>Starting play session…</p>
-          )}
+      <div className="app-frame cr-backdrop--dim">
+        <div className="cr-gate">
+          <div className="cr-gate-card">
+            <RoyalPokerLogo size="lg" />
+            {failed ? (
+              <>
+                <p role="alert" className="cr-gate-alert">{message || 'Could not start your play session.'}</p>
+                <div className="cr-gate-actions">
+                  {!blocked && (
+                    <button type="button" className="cr-btn-primary" onClick={retry}>
+                      Try again
+                    </button>
+                  )}
+                  {(launch || blocked || closeUrl) && (
+                    <button
+                      type="button"
+                      className="cr-btn-secondary"
+                      onClick={() => exitOperatorGame(closeUrl)}
+                    >
+                      Return to lobby
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="cr-gate-track" aria-hidden />
+                <p role="status" className="cr-gate-status">Starting play session…</p>
+              </>
+            )}
+          </div>
         </div>
       </div>
     )

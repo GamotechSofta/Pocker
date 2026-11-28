@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import confetti from 'canvas-confetti'
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Layers, LogOut, RotateCcw, Sparkles } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Crown, Eye, EyeOff, Layers, LogOut, RotateCcw, Sparkles, Trophy } from 'lucide-react'
 import { soundEngine } from '@/audio/soundEngine'
 import { FullscreenToggle } from '@/royal/FullscreenToggle'
 import { RoyalCard } from '@/royal/RoyalCard'
 import { SoundToggle } from '@/royal/SoundToggle'
+import { variantThemeFor } from '@/royal/pokerVariants'
 import { useModalScroll } from '@/royal/useModalScroll'
 import type { TableState } from '@/types/game'
 import { getAvatarForPlayer, photoForCharacter } from '@/utils/avatarUtils'
@@ -34,6 +35,21 @@ function signed(amount: number): string {
   return '🪙0'
 }
 
+function variantRuleSummary(variant?: string | null): string {
+  switch (variant) {
+    case 'OMAHA':
+      return 'Use exactly 2 hole cards + 3 board cards'
+    case 'PINEAPPLE':
+      return '3 dealt · 1 discarded · best 5-card hand wins'
+    case 'FIVE_CARD_DRAW':
+      return 'Private 5-card draw · best 5-card poker hand wins'
+    case 'RAZZ':
+      return 'Lowest 5 unpaired cards win · A-2-3-4-5 is best'
+    default:
+      return 'Best 5-card hand from hole cards + board'
+  }
+}
+
 export function HandResultPage({
   state,
   viewerId,
@@ -54,9 +70,10 @@ export function HandResultPage({
   const winners = winnerIds(state.payouts)
   const viewerWon = Boolean(viewerId && winners.has(viewerId))
   const split = winners.size > 1
+  const theme = variantThemeFor(state.variant, variantName) ?? 'emerald'
 
   useEffect(() => {
-    const timer = window.setInterval(() => setSecondsLeft((seconds) => seconds === null ? null : Math.max(0, seconds - 1)), 1000)
+    const timer = window.setInterval(() => setSecondsLeft((seconds) => (seconds === null ? null : Math.max(0, seconds - 1))), 1000)
     return () => window.clearInterval(timer)
   }, [])
 
@@ -86,9 +103,12 @@ export function HandResultPage({
       const photo = isMe ? photoForCharacter(avatarId) : getAvatarForPlayer(nameOf(player.playerId, player.username)).photo
       return { player, won, shown, net, isMe, cards, photo }
     })
-    .sort((a, b) => Number(b.won) - Number(a.won) || (b.net ?? 0) - (a.net ?? 0))
+    .sort((a, b) => Number(b.won) - Number(a.won) || Number(!b.player.folded) - Number(!a.player.folded) || Number(b.isMe) - Number(a.isMe) || (b.net ?? 0) - (a.net ?? 0))
 
+  const contenders = rows.filter((row) => !row.player.folded || row.won || row.isMe || row.cards.length > 0)
+  const foldedOthers = rows.filter((row) => row.player.folded && !row.won && !row.isMe && row.cards.length === 0)
   const viewerRow = rows.find((row) => row.isMe)
+
   const headline = split
     ? viewerWon
       ? 'You Split the Pot!'
@@ -100,12 +120,29 @@ export function HandResultPage({
         : 'Hand Complete'
 
   const subtitle = leadShowdown
-    ? `${split ? 'Tied with' : 'Winning hand:'} ${leadShowdown.description}. All revealed cards and chip results are shown below.`
-    : 'Everyone else folded, so the pot was taken uncontested.'
+    ? `${split ? 'Split pot with' : 'Winning hand:'} ${leadShowdown.description}. Compare the board and revealed hands below.`
+    : 'All other players folded — pot awarded uncontested without a showdown.'
+
+  const viewerReason = !viewerRow
+    ? 'Seated out'
+    : viewerRow.won
+      ? split
+        ? 'Split showdown pot'
+        : leadShowdown
+          ? `Won with ${viewerRow.shown?.description ?? leadShowdown.description}`
+          : 'Won uncontested'
+      : viewerRow.player.folded
+        ? 'You folded this hand'
+        : viewerRow.shown?.description
+          ? `Lost with ${viewerRow.shown.description}`
+          : 'Lost at showdown'
+
+  const boardCards = state.communityCards
+  const hasFlop = boardCards.length >= 3
 
   return (
     <div
-      className="result-page-screen"
+      className={`hr-screen cr-theme--${theme}`}
       role="region"
       aria-label="Hand Result Page"
       onWheel={scroll.onWheel}
@@ -113,84 +150,149 @@ export function HandResultPage({
       onTouchMove={scroll.onTouchMove}
       onTouchEnd={scroll.onTouchEnd}
     >
-      <header className="result-top-bar">
-        <div className="result-top-left">
-          <button type="button" className="result-back-btn" disabled={busy} onClick={onLeave}
-            title={tournament ? 'Return to tournament lobby' : 'Leave table and return to lobby'}>
-            <LogOut size={15} />
-            Leave Table
+      <header className="hr-topbar">
+        <div className="hr-topbar-left">
+          <button
+            type="button"
+            className="hr-pill-btn hr-pill-btn--leave"
+            disabled={busy}
+            onClick={onLeave}
+            title={tournament ? 'Return to tournament lobby' : 'Leave table and return to lobby'}
+          >
+            <LogOut size={14} />
+            <span>Leave Table</span>
           </button>
         </div>
-        <div className="result-top-center">
-          <span className="result-top-title">♠ HAND #{state.handNumber} SHOWDOWN ♠</span>
-          <span className="result-top-pill">
-            {variantName} • {state.players.length} Players
+
+        <div className="hr-topbar-center">
+          <span className="hr-hand-tag">
+            ♠ HAND #{state.handNumber} · {leadShowdown ? 'SHOWDOWN' : 'RESULT'} ♠
+          </span>
+          <span className="hr-variant-tag">
+            {variantName} · {state.players.length} Players
           </span>
         </div>
-        <div className="result-top-right">
+
+        <div className="hr-topbar-right">
           <SoundToggle compact />
           <FullscreenToggle compact />
-          <span className="result-table-id-pill">Table {state.tableId.slice(0, 8).toUpperCase()}</span>
+          <span className="hr-table-tag">Table {state.tableId.slice(0, 8).toUpperCase()}</span>
         </div>
       </header>
 
-      <main className="result-page-content">
-        <section className="result-hero-banner">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-            <h1 className="result-hero-title">
-              {viewerWon && <Sparkles size={22} color="#fbbf24" style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />}
+      <main className="hr-content">
+        <section className="hr-hero-card">
+          <div className="hr-hero-top">
+            <span className={`hr-outcome-badge${viewerWon ? ' is-win' : ''}`}>
+              {viewerWon ? <Crown size={13} /> : <Trophy size={13} />}
+              <span>{leadShowdown ? 'Showdown Complete' : 'Uncontested Pot'}</span>
+            </span>
+
+            {secondsLeft !== null ? (
+              <div className="hr-countdown-pill">
+                <RotateCcw size={13} style={{ animation: 'cr-spin 4s linear infinite' }} />
+                <span>
+                  Next hand starting in <strong>{secondsLeft}s</strong>…
+                </span>
+              </div>
+            ) : (
+              <p className="hr-countdown-pill">Table paused</p>
+            )}
+          </div>
+
+          <div className="hr-hero-headline">
+            <h1 className="hr-title">
+              {viewerWon && <Sparkles size={22} color="#f5d77c" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 8 }} />}
               {headline}
             </h1>
-            <p className="result-hero-subtitle">{subtitle}</p>
-            {secondsLeft !== null ? <div className="royal-next-deal-pill">
-              <RotateCcw size={14} style={{ animation: 'spin 4s linear infinite' }} />
-              <span>
-                Next hand starting in <strong>{secondsLeft}s</strong>…
-              </span>
-            </div> : <p className="royal-next-deal-pill">Table paused</p>}
+            <p className="hr-subtitle">{subtitle}</p>
           </div>
 
-          {state.communityCards.length > 0 && (
-            <div className="royal-result-board" aria-label="Board cards">
-              {state.communityCards.map((code, index) => (
-                <RoyalCard key={`${code}-${index}`} code={code} size="small" />
-              ))}
+          <div className={`hr-summary-grid${boardCards.length > 0 ? ' has-board' : ''}`}>
+            {boardCards.length > 0 && (
+              <div className="hr-board-box" aria-label="Board cards">
+                <div className="hr-board-box-head">
+                  <span>COMMUNITY BOARD</span>
+                  <small>{variantRuleSummary(state.variant)}</small>
+                </div>
+                {hasFlop ? (
+                  <div className="hr-streets-row">
+                    <div className="hr-street-group">
+                      <span className="hr-street-label">Flop</span>
+                      <div className="hr-cards-row">
+                        {boardCards.slice(0, 3).map((code, index) => (
+                          <RoyalCard key={`${code}-${index}`} code={code} />
+                        ))}
+                      </div>
+                    </div>
+                    {boardCards[3] && (
+                      <div className="hr-street-group">
+                        <span className="hr-street-label">Turn</span>
+                        <div className="hr-cards-row">
+                          <RoyalCard code={boardCards[3]} />
+                        </div>
+                      </div>
+                    )}
+                    {boardCards[4] && (
+                      <div className="hr-street-group">
+                        <span className="hr-street-label">River</span>
+                        <div className="hr-cards-row">
+                          <RoyalCard code={boardCards[4]} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="hr-cards-row">
+                    {boardCards.map((code, index) => (
+                      <RoyalCard key={`${code}-${index}`} code={code} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="hr-kpis">
+              <div className="hr-kpi-tile">
+                <span className="hr-kpi-label">Total Pot</span>
+                <strong className="hr-kpi-value is-gold">🪙{formatChipCount(totalPot)}</strong>
+                <span className="hr-kpi-note">{split ? `Split ${winners.size} ways` : 'Single winner payout'}</span>
+              </div>
+
+              <div className="hr-kpi-tile is-featured">
+                <span className="hr-kpi-label">Winning Hand</span>
+                <strong className="hr-kpi-value is-accent">{leadShowdown?.description ?? 'Uncontested'}</strong>
+                <span className="hr-kpi-note">
+                  {leadWinner ? `${nameOf(leadWinner.playerId, leadWinner.username)} · +🪙${formatChipCount(payoutAmount(state.payouts, leadWinner.playerId))}` : 'Hand finished'}
+                </span>
+              </div>
+
+              <div className="hr-kpi-tile">
+                <span className="hr-kpi-label">Your Result</span>
+                <strong className={`hr-kpi-value ${(viewerRow?.net ?? 0) > 0 ? 'is-win' : (viewerRow?.net ?? 0) < 0 ? 'is-loss' : ''}`}>
+                  {viewerRow?.net === null || viewerRow === undefined ? '—' : signed(viewerRow.net)}
+                </strong>
+                <span className="hr-kpi-note">{viewerReason}</span>
+              </div>
             </div>
+          </div>
+
+          {boardCards.length === 0 && (
+            <div className="hr-rule-note">{variantRuleSummary(state.variant)}</div>
           )}
-
-          <div className="result-pot-strip">
-            <div className="result-pot-strip-item">
-              <span className="result-pot-strip-label">Total Pot</span>
-              <span className="result-pot-strip-val" style={{ color: '#fbbf24' }}>
-                🪙{formatChipCount(totalPot)}
-              </span>
-            </div>
-            <div className="result-pot-strip-divider" />
-            <div className="result-pot-strip-item">
-              <span className="result-pot-strip-label">Winning Hand</span>
-              <span className="result-pot-strip-val">{leadShowdown?.description ?? 'Uncontested'}</span>
-            </div>
-            <div className="result-pot-strip-divider" />
-            <div className="result-pot-strip-item val-winner">
-              <span className="result-pot-strip-label" style={{ color: '#86efac' }}>
-                Your Result
-              </span>
-              <span className={`result-pot-strip-val ${(viewerRow?.net ?? 0) >= 0 ? 'val-green' : 'val-red'}`}>
-                {viewerRow?.net === null || viewerRow === undefined ? '—' : signed(viewerRow.net)}
-              </span>
-            </div>
-          </div>
         </section>
 
-        <section className="result-scoreboard-sheet">
-          <div className="result-sheet-header">
-            <div className="result-sheet-title">
+        <section className="hr-players-card">
+          <div className="hr-players-head">
+            <div className="hr-players-title">
               <Layers size={15} />
-              <span>{tournament ? 'HAND SETTLEMENT' : 'SHOWDOWN SCOREBOARD'}</span>
+              <span>{tournament ? 'HAND SETTLEMENT' : 'PLAYER HANDS & PAYOUTS'}</span>
+              <span className="hr-count-chip">{rows.length} Players</span>
             </div>
+
             <button
               type="button"
-              className="result-toggle-btn"
+              className="hr-toggle-btn"
               onClick={() => {
                 soundEngine.play('click')
                 setShowAllCards((show) => !show)
@@ -208,107 +310,124 @@ export function HandResultPage({
             </button>
           </div>
 
-          <div className="result-sheet-table-head">
-            <span>PLAYER &amp; STATUS</span>
-            <span style={{ textAlign: 'right' }}>HAND &amp; CHIPS</span>
-          </div>
-
-          <div className="result-sheet-rows-list">
-            {rows.map((row, index) => (
-              <div key={row.player.playerId} className={`result-sheet-row ${row.won ? 'winner-row' : ''}`}>
-                <div className="result-row-summary">
-                  <div className="result-row-player">
-                    {!tournament && <div className={`result-row-rank ${row.won ? 'result-row-rank--winner' : 'result-row-rank--normal'}`}>
-                      #{index + 1}
-                    </div>}
-                    <img className="royal-result-avatar" src={row.photo} alt="" draggable={false} />
-                    <div className="result-row-meta">
-                      <div className="result-row-name-line">
-                        <span className="result-row-name">{nameOf(row.player.playerId, row.player.username)}</span>
-                        {row.isMe && <span className="result-you-badge">YOU</span>}
-                      </div>
-                      <div className="result-row-status">
-                        {row.won ? (
-                          <span className="result-row-status--winner">
-                            <CheckCircle2 size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                            {split ? 'Split pot' : 'Winner'}
-                            {row.shown ? ` · ${row.shown.description}` : ''}
-                          </span>
-                        ) : row.player.folded ? (
-                          <span className="result-row-status--dropped">
-                            <AlertCircle size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                            Folded
-                          </span>
-                        ) : (
-                          <span className="result-row-status--lost">
-                            <AlertCircle size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
-                            Lost{row.shown ? ` · ${row.shown.description}` : ''}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="result-row-finances">
-                    <div className={`result-row-delta ${row.won ? 'result-row-delta--win' : 'result-row-delta--loss'}`}>
-                      {row.net === null ? '—' : signed(row.net)}
-                    </div>
-                    <div className="result-row-score-sub">
-                      <span style={{ color: '#fbbf24', fontWeight: 800 }}>Stack 🪙{formatChipCount(row.player.chipStack)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {showAllCards && (
-                  <div className="result-row-cards-tray">
-                    {row.cards.length > 0 ? (
-                      <div className="result-card-group">
-                        <div className="result-group-header">
-                          <span
-                            className="result-group-badge"
-                            style={{
-                              color: row.won ? '#6ee7b7' : '#fcd34d',
-                              background: row.won ? 'rgba(16,185,129,0.15)' : 'rgba(251,191,36,0.12)',
-                            }}
-                          >
-                            {row.shown?.description ?? 'Hole cards'}
-                          </span>
+          <div className="hr-contenders-grid">
+            {contenders.map((row) => {
+              const rank = rows.indexOf(row) + 1
+              return (
+                <article
+                  key={row.player.playerId}
+                  className={`hr-player-card${row.won ? ' is-winner' : row.player.folded ? ' is-folded' : ''}${row.isMe ? ' is-me' : ''}`}
+                >
+                  <div className="hr-player-top">
+                    <div className="hr-player-id">
+                      {!tournament && (
+                        <span className={`hr-rank-badge${row.won ? ' is-winner' : ''}`}>#{rank}</span>
+                      )}
+                      <img className="hr-avatar" src={row.photo} alt="" draggable={false} />
+                      <div className="hr-player-meta">
+                        <div className="hr-player-name-row">
+                          <span className="hr-player-name">{nameOf(row.player.playerId, row.player.username)}</span>
+                          {row.isMe && <span className="hr-you-tag">YOU</span>}
+                          {row.won && (
+                            <span className="hr-win-tag">
+                              <Crown size={10} /> {split ? 'SPLIT' : 'WINNER'}
+                            </span>
+                          )}
                         </div>
-                        <div className="result-group-fan">
+                        <div className={`hr-player-status${row.won ? ' is-win' : row.player.folded ? ' is-fold' : ' is-lost'}`}>
+                          {row.won ? (
+                            <>
+                              <CheckCircle2 size={12} />
+                              <span>{row.shown ? row.shown.description : 'Won uncontested'}</span>
+                            </>
+                          ) : row.player.folded ? (
+                            <>
+                              <AlertCircle size={12} />
+                              <span>Folded before showdown</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle size={12} />
+                              <span>{row.shown ? `Lost · ${row.shown.description}` : 'Lost'}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="hr-player-finances">
+                      <span className={`hr-delta${row.won ? ' is-win' : (row.net ?? 0) < 0 ? ' is-loss' : ''}`}>
+                        {row.net === null ? '—' : signed(row.net)}
+                      </span>
+                      <span className="hr-stack">Stack 🪙{formatChipCount(row.player.chipStack)}</span>
+                    </div>
+                  </div>
+
+                  {showAllCards && (
+                    <div className="hr-player-cards-wrap">
+                      {row.cards.length > 0 ? (
+                        <div className="hr-hole-cards">
                           {row.cards.map((code, cardIndex) => (
-                            <div key={`${code}-${cardIndex}`} className="result-card-slot" style={{ zIndex: cardIndex + 1 }}>
-                              <RoyalCard code={code} />
-                            </div>
+                            <RoyalCard key={`${code}-${cardIndex}`} code={code} />
                           ))}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="result-cards-concealed">
-                        {row.player.folded ? 'Cards mucked (player folded)' : 'Cards not shown'}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+                      ) : (
+                        <div className="hr-cards-muted">
+                          {row.player.folded ? 'Cards mucked (folded)' : 'Hand not revealed'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </article>
+              )
+            })}
           </div>
+
+          {foldedOthers.length > 0 && (
+            <div className="hr-folded-section">
+              <div className="hr-folded-label">Folded Before Showdown ({foldedOthers.length})</div>
+              <div className="hr-folded-grid">
+                {foldedOthers.map((row) => {
+                  const rank = rows.indexOf(row) + 1
+                  return (
+                    <div key={row.player.playerId} className="hr-folded-pill">
+                      <div className="hr-folded-left">
+                        {!tournament && <span className="hr-folded-rank">#{rank}</span>}
+                        <img className="hr-folded-avatar" src={row.photo} alt="" draggable={false} />
+                        <div className="hr-folded-info">
+                          <strong>{nameOf(row.player.playerId, row.player.username)}</strong>
+                          <span>Folded · Mucked</span>
+                        </div>
+                      </div>
+                      <div className="hr-folded-right">
+                        <strong className={(row.net ?? 0) < 0 ? 'is-loss' : ''}>
+                          {row.net === null ? '—' : signed(row.net)}
+                        </strong>
+                        <span>Stack 🪙{formatChipCount(row.player.chipStack)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
-        <footer className="result-bottom-bar">
-          <button type="button" className="result-btn-leave" disabled={busy} onClick={onLeave}>
-            <LogOut size={16} />
-            {tournament ? 'Tournament Lobby' : 'Leave Table'}
+        <footer className="hr-footer">
+          <button type="button" className="hr-footer-leave" disabled={busy} onClick={onLeave}>
+            <LogOut size={15} />
+            <span>{tournament ? 'Tournament Lobby' : 'Leave Table'}</span>
           </button>
           <button
             type="button"
-            className="result-btn-rematch"
+            className="cr-btn-play hr-footer-continue"
             onClick={() => {
               soundEngine.play('click')
               onContinue()
             }}
           >
-            <RotateCcw size={17} />
-            {secondsLeft === null ? 'Back to Table' : `Back to Table (${secondsLeft}s)`}
+            <RotateCcw size={16} />
+            <span>{secondsLeft === null ? 'Back to Table' : `Back to Table (${secondsLeft}s)`}</span>
           </button>
         </footer>
       </main>

@@ -3,12 +3,11 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  color: #f8fafc;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #f5f3ed;
+  font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
   background:
-    radial-gradient(circle at 18% 0%, rgba(16, 185, 129, 0.14), transparent 36%),
-    radial-gradient(circle at 86% 4%, rgba(212, 175, 55, 0.14), transparent 34%),
-    linear-gradient(180deg, rgba(6, 12, 16, 0.94), #05080d 45%);
+    linear-gradient(180deg, rgba(8, 10, 14, 0.82), #080a0f 28rem),
+    #080a0f url('/royal-lounge-bg.jpg') top center / cover no-repeat;
 }
 
 .history-shell {
@@ -68,12 +67,12 @@
   gap: 14px;
   flex-wrap: wrap;
   padding: 18px 20px;
-  border-radius: 18px;
-  border: 1px solid rgba(212, 175, 55, 0.4);
+  border-radius: 16px;
+  border: 1px solid rgba(228, 177, 68, 0.45);
   background:
-    radial-gradient(circle at 8% 20%, rgba(231, 185, 94, 0.16), transparent 40%),
-    linear-gradient(125deg, #10241b 0%, #0d1520 70%);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+    radial-gradient(circle at 10% 15%, rgba(228, 177, 68, 0.14), transparent 44%),
+    linear-gradient(135deg, rgba(16, 19, 26, 0.95) 0%, rgba(10, 12, 17, 0.96) 100%);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
 }
 
 .history-hero-eyebrow {

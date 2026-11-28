@@ -16,6 +16,8 @@ import { usePokerSounds } from '@/hooks/usePokerSounds'
 import { BoardCenter } from '@/royal/board/BoardCenter'
 import { ControlBar } from '@/royal/board/ControlBar'
 import { DealAnimation, type DealTarget } from '@/royal/board/DealAnimation'
+import { DealerAnimationLayer } from '@/royal/board/DealerAnimationLayer'
+import type { DealerGaze, DealImpulse } from '@/royal/board/dealerMotion'
 import { HandResultPage } from '@/royal/board/HandResultPage'
 import { HeroHand } from '@/royal/board/HeroHand'
 import { OpponentPod, type SeatPosition } from '@/royal/board/OpponentPod'
@@ -45,7 +47,7 @@ const RESULT_COUNTDOWN_SECONDS = 7
 /** Let the final action and showdown cards land on the felt before the result page opens. */
 const RESULT_REVEAL_DELAY_MS = 1_400
 const JOIN_WAIT_SECONDS = 15
-const WIDE_FIELD_SEATS = [[12, 65], [10, 43], [18, 23], [32, 22], [48, 21], [64, 22], [80, 23], [90, 43], [88, 64]] as const
+const WIDE_FIELD_SEATS = [[20, 71], [14.5, 51], [19, 34], [30, 22.5], [70, 22.5], [81, 34], [85.5, 51], [80, 71], [67, 74]] as const
 
 /** Clockwise from the viewer, same as the Rummy table; nobody sits in front of the dealer. */
 function perimeterPosition(index: number, total: number): SeatPosition {
@@ -539,6 +541,15 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
     viewer && viewerStart !== undefined ? viewerStart - viewer.chipStack : (viewer?.betThisRound ?? 0)
   const handLive = Boolean(viewer && !idle && !viewer.folded && !complete)
   const showResult = Boolean(state && seated && resultOpenFor === state.handNumber && complete)
+  const dealImpulseRef = useRef<DealImpulse>({ atMs: -9999, dirX: 0 })
+  const activeSeat = seatSlots.find((slot) => slot.player?.isTurn)
+  const dealerGaze: DealerGaze = activeSeat?.placement
+    ? (activeSeat.placement[0] < 44 ? 'left' : activeSeat.placement[0] > 56 ? 'right' : 'center')
+    : activeSeat?.position === 'top-left' || activeSeat?.position === 'left' || activeSeat?.position === 'bottom-left'
+      ? 'left'
+      : activeSeat?.position === 'top-right' || activeSeat?.position === 'right' || activeSeat?.position === 'bottom-right'
+        ? 'right'
+        : 'center'
 
   if (!state) {
     return (
@@ -583,6 +594,7 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
 
         <main className={`casino-table${dealPlaying ? ' deal-in-progress' : ''}`}>
           <div className="casino-table-stage" id="game-felt-table">
+            <DealerAnimationLayer dealing={dealPlaying} gaze={dealerGaze} impulseRef={dealImpulseRef} />
             <div className="board-hud" aria-label="Table status">
               <div className="board-info-plate">
                 <div className="board-info-row">
@@ -824,6 +836,9 @@ export function GamePage({ tournament = false, assignment }: { tournament?: bool
               active={dealPlaying}
               targets={dealTargets}
               cardsPerPlayer={initialHoleCards(variant)}
+              onCardDealt={(dirX) => {
+                dealImpulseRef.current = { atMs: performance.now(), dirX }
+              }}
               onCardLanded={(targetId) =>
                 setDealtCounts((counts) => (counts ? { ...counts, [targetId]: (counts[targetId] ?? 0) + 1 } : counts))
               }

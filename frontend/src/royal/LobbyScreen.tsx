@@ -2,17 +2,18 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
+  Check,
   Coins,
   DoorOpen,
   History,
   KeyRound,
   Layers,
+  Link2,
   Minus,
   Pencil,
   Play,
   Plus,
   RotateCw,
-  Sparkles,
   Trophy,
   Users,
   UsersRound,
@@ -30,6 +31,11 @@ import { paths } from '@/constants/paths'
 import { tryLockLandscape } from '@/hooks/useRequiresLandscape'
 import { FullscreenToggle } from '@/royal/FullscreenToggle'
 import { SoundToggle } from '@/royal/SoundToggle'
+import {
+  LaurelSprig,
+  RoyalSpadeMedallion,
+  SetupHeaderCrest,
+} from '@/royal/RoyalLobbyArt'
 import { RoyalPokerLogo } from '@/royal/RoyalPokerLogo'
 import { WalletModal } from '@/royal/WalletModal'
 import {
@@ -67,14 +73,31 @@ function StakeStepper({
   plusDisabled: boolean
 }) {
   return (
-    <div className="stake-stepper">
-      <button type="button" className="stake-step-btn" aria-label={`Lower ${label}`} disabled={minusDisabled} onClick={onMinus}>
-        <Minus size={16} strokeWidth={3.5} />
+    <div className="cr-setup-stepper">
+      <button type="button" className="cr-setup-step-btn" aria-label={`Lower ${label}`} disabled={minusDisabled} onClick={onMinus}>
+        <Minus size={13} strokeWidth={3} />
       </button>
-      <div className="stake-step-value">{value}</div>
-      <button type="button" className="stake-step-btn" aria-label={`Raise ${label}`} disabled={plusDisabled} onClick={onPlus}>
-        <Plus size={16} strokeWidth={3.5} />
+      <div className="cr-setup-step-val">{value}</div>
+      <button type="button" className="cr-setup-step-btn" aria-label={`Raise ${label}`} disabled={plusDisabled} onClick={onPlus}>
+        <Plus size={13} strokeWidth={3} />
       </button>
+    </div>
+  )
+}
+
+function StepProgressTracker() {
+  return (
+    <div className="cr-step-tracker">
+      <div className="cr-step-label">
+        Step 2 of 2: <strong>Configure Table</strong>
+      </div>
+      <div className="cr-step-progress" aria-hidden>
+        <span className="cr-step-node">
+          <Check size={10} strokeWidth={3.2} />
+        </span>
+        <span className="cr-step-line" />
+        <span className="cr-step-node cr-step-node--active">2</span>
+      </div>
     </div>
   )
 }
@@ -82,16 +105,13 @@ function StakeStepper({
 function StakeNavRight({ variant, variantLocked }: { variant: string; variantLocked: boolean }) {
   const { simulatedLandscape, toggleFlip } = useLandscapeGate()
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <div className="stake-step">
-        Step 2 of 2: <strong>Configure Table</strong>
-      </div>
+    <div className="cr-setup-nav-right">
       <Link
         to={variantLocked ? paths.history : paths.variantHistory(variant)}
-        className="stake-history-btn"
+        className="cr-setup-pill-btn"
         onClick={() => soundEngine.play('click')}
       >
-        <History size={13} />
+        <History size={14} />
         <span>History</span>
       </Link>
       {simulatedLandscape && (
@@ -101,12 +121,12 @@ function StakeNavRight({ variant, variantLocked }: { variant: string; variantLoc
             soundEngine.play('click')
             toggleFlip()
           }}
-          className="board-hud-flip-btn"
-          style={{ width: '28px', height: '28px', borderRadius: '6px', flexShrink: 0 }}
+          className="cr-setup-pill-btn"
+          style={{ width: '34px', padding: 0, justifyContent: 'center', borderRadius: '9px' }}
           title="Flip orientation 180°"
           aria-label="Flip screen 180 degrees"
         >
-          <RotateCw size={13} />
+          <RotateCw size={14} />
         </button>
       )}
       <SoundToggle compact />
@@ -116,40 +136,19 @@ function StakeNavRight({ variant, variantLocked }: { variant: string; variantLoc
 }
 
 function VariantBanner({ art, onSelect }: { art: PokerVariantArt; onSelect: () => void }) {
-  const mid = (art.cards.length - 1) / 2
   return (
     <button
       type="button"
-      className={`variant-banner poker-banner poker-banner--${art.theme}`}
+      className="cr-shield-btn"
       aria-label={variantTitle(art.id)}
       onClick={onSelect}
     >
-      <span className="poker-banner__suit poker-banner__suit--tl" aria-hidden>♠</span>
-      <span className="poker-banner__suit poker-banner__suit--br" aria-hidden>♥</span>
-      <span className="poker-banner__fan" aria-hidden>
-        {art.cards.map((card, index) => {
-          const red = card.includes('♥') || card.includes('♦')
-          const offset = index - mid
-          return (
-            <span
-              key={card}
-              className={`poker-banner__card${red ? ' is-red' : ''}`}
-              style={{ '--fan-rot': `${offset * 9}deg`, '--fan-y': `${Math.abs(offset) * 4}px` } as CSSProperties}
-            >
-              <b>{card.slice(0, -1)}</b>
-              <i>{card.slice(-1)}</i>
-            </span>
-          )
-        })}
-      </span>
-      <span className="poker-banner__chip poker-banner__chip--left" aria-hidden />
-      <span className="poker-banner__chip poker-banner__chip--right" aria-hidden />
-      <span className="poker-banner__plate">
-        <span className="poker-banner__title">{art.title}</span>
-        <span className="poker-banner__subtitle">{art.subtitle}</span>
-        <span className="poker-banner__diamond" aria-hidden>♠</span>
-      </span>
-      <span className="poker-banner__tagline">{art.tagline}</span>
+      <img
+        src={art.image}
+        alt=""
+        className="cr-shield-img"
+        draggable={false}
+      />
     </button>
   )
 }
@@ -205,6 +204,13 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
   const tier = BLIND_TIERS[tierIndex] ?? BLIND_TIERS[1]
   const buyIn = buyInFor(tierIndex)
   const activeTitle = variantTitle(selectedVariant)
+  const activeArt = POKER_VARIANT_ART.find((variant) => variant.id === selectedVariant) ?? POKER_VARIANT_ART[0]
+  const activeTheme =
+    currentPage === 'CONFIGURE_TABLE'
+      ? activeArt.theme
+      : currentPage === 'INTRO' && lockedArt
+        ? lockedArt.theme
+        : null
 
   const refreshWallet = useCallback(async () => {
     try {
@@ -468,72 +474,84 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
 
   return (
     <LandscapeGate
-      // Intro and game-selection screens stay responsive in portrait.
-      // Only the table configuration and active matchmaking need landscape.
-      enabled={currentPage === 'CONFIGURE_TABLE' || isMatchmaking}
-      hideFloatingBadge={currentPage === 'CONFIGURE_TABLE'}
+      // Keep intro, game-selection, and table setup cleanly responsive in portrait & landscape.
+      enabled={false}
     >
       <div
-        className={`lobby-frame${currentPage === 'CONFIGURE_TABLE' ? ' lobby-frame--stake' : ''}`}
-        style={{ color: '#f8fafc' }}
+        className={`cr-shell ${currentPage === 'CONFIGURE_TABLE' ? 'cr-setup-backdrop' : 'cr-backdrop'}${
+          activeTheme ? ` cr-theme--${activeTheme}` : ''
+        }`}
       >
-        <header className="lobby-topbar" style={{ display: currentPage === 'CONFIGURE_TABLE' ? 'none' : undefined }}>
+        <header className="cr-topbar" style={{ display: currentPage === 'CONFIGURE_TABLE' ? 'none' : undefined }}>
           <div className="lobby-brand" title="Royal Poker">
             <RoyalPokerLogo />
           </div>
 
-          <div className="lobby-top-actions">
-            {launch && <button type="button" className="lobby-link-btn" onClick={() => exitOperatorGame(launch.closeUrl)}><DoorOpen size={16} /> Exit</button>}
+          <div className="cr-topbar-actions">
             <SoundToggle compact />
             <FullscreenToggle compact />
 
-            {isEditingName ? (
-              <input
-                type="text"
-                value={localName}
-                onChange={(event) => setLocalName(event.target.value)}
-                onBlur={commitDisplayName}
-                onKeyDown={(event) => event.key === 'Enter' && commitDisplayName()}
-                autoFocus
-                maxLength={16}
-                aria-label="Your name"
-                className="lobby-name-input"
-              />
-            ) : (
+            <div className="cr-topbar-group">
+              {isEditingName ? (
+                <input
+                  type="text"
+                  value={localName}
+                  onChange={(event) => setLocalName(event.target.value)}
+                  onBlur={commitDisplayName}
+                  onKeyDown={(event) => event.key === 'Enter' && commitDisplayName()}
+                  autoFocus
+                  maxLength={16}
+                  aria-label="Your name"
+                  className="cr-name-input"
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="cr-nav-btn"
+                  disabled={Boolean(launch)}
+                  onClick={() => {
+                    soundEngine.play('click')
+                    setIsEditingName(true)
+                  }}
+                >
+                  {displayName || 'Player'}
+                  {!launch && <Pencil size={12} strokeWidth={2} />}
+                </button>
+              )}
+
+              <span className="cr-topbar-sep" aria-hidden />
+
+              <Link
+                to={variantLocked ? paths.history : currentPage === 'CONFIGURE_TABLE' ? paths.variantHistory(selectedVariant) : paths.history}
+                className="cr-nav-btn"
+                title="Game History"
+                onClick={() => soundEngine.play('click')}
+              >
+                <History size={14} />
+                <span>History</span>
+              </Link>
+            </div>
+
+            {launch && (
               <button
                 type="button"
-                className="lobby-link-btn"
-                disabled={Boolean(launch)}
-                onClick={() => {
-                  soundEngine.play('click')
-                  setIsEditingName(true)
-                }}
+                className="cr-nav-btn cr-nav-btn--boxed"
+                onClick={() => exitOperatorGame(launch.closeUrl)}
               >
-                {displayName || 'Player'}
-                {!launch && <Pencil size={12} strokeWidth={2} />}
+                <DoorOpen size={14} /> Exit
               </button>
             )}
 
-            <Link
-              to={variantLocked ? paths.history : currentPage === 'CONFIGURE_TABLE' ? paths.variantHistory(selectedVariant) : paths.history}
-              className="lobby-link-btn"
-              title="Game History"
-              onClick={() => soundEngine.play('click')}
-            >
-              <History size={14} />
-              <span>History</span>
-            </Link>
-
             <button
               type="button"
-              className="lobby-balance"
+              className="cr-wallet-pill"
               title="Open wallet"
               onClick={() => {
                 soundEngine.play('click')
                 setWalletOpen(true)
               }}
             >
-              <Coins size={14} />
+              <Coins size={15} />
               <span>
                 {walletBalance == null
                   ? 'Wallet'
@@ -552,65 +570,69 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
           onBalanceChange={setWalletBalance}
         />
 
-        <main className={`lobby-main${currentPage === 'SELECT_VARIANT' || currentPage === 'INTRO' ? ' lobby-main--variants' : ''}`}>
+        <main className={`cr-main${currentPage === 'CONFIGURE_TABLE' || currentPage === 'INTRO' ? ' cr-main--center' : ''}`}>
           {currentPage === 'INTRO' && lockedArt && (
-            <div className={`variant-intro-screen variant-intro-screen--${lockedArt.theme}`}>
-              <div className="variant-intro-heading">
-                <span className="variant-intro-eyebrow">Welcome to Royal Poker</span>
+            <div className="cr-intro">
+              <div className="cr-intro-head">
                 <h1>{variantTitle(lockedArt.id)}</h1>
                 <p>{lockedArt.tagline}</p>
               </div>
-              <div className="variant-intro-card">
+              <div className="cr-intro-preview">
                 <VariantBanner art={lockedArt} onSelect={() => selectVariant(lockedArt.id)} />
               </div>
               <button
                 type="button"
-                className="variant-intro-cta"
+                className="cr-btn-primary"
+                style={{ width: '100%' }}
                 onClick={() => selectVariant(lockedArt.id)}
               >
                 ENTER {lockedArt.title.toUpperCase()} <span aria-hidden>→</span>
               </button>
-              <div className="variant-intro-links">
+              <div className="cr-intro-links">
                 {showTournamentsInApp() && (
-                  <Link className="player-tournament-button player-tournament-secondary player-tournament-entry" to={paths.tournaments}
+                  <Link className="cr-nav-btn cr-nav-btn--boxed" to={paths.tournaments}
                     onClick={() => soundEngine.play('click')}>
-                    <Trophy size={17} aria-hidden="true" /> Tournaments
+                    <Trophy size={15} aria-hidden="true" /> Tournaments
                   </Link>
                 )}
-                <Link className="player-tournament-button player-tournament-secondary player-tournament-entry" to={paths.variantHistory(lockedArt.id)}
+                <Link className="cr-nav-btn cr-nav-btn--boxed" to={paths.variantHistory(lockedArt.id)}
                   onClick={() => soundEngine.play('click')}>
-                  <History size={17} aria-hidden="true" /> History
+                  <History size={15} aria-hidden="true" /> History
                 </Link>
               </div>
             </div>
           )}
 
           {currentPage === 'SELECT_VARIANT' && (
-            <div className={`lobby-variant-hub${variantLocked ? ' lobby-variant-hub--standalone' : ''}`}>
-              <div className="lobby-choose-heading">
-                <span className="lobby-choose-eyebrow">{variantLocked ? 'Welcome to Royal Poker' : 'Select a game'}</span>
-                <h1 className="lobby-choose-title">
-                  {variantLocked && lockedVariant ? (
-                    <em>{variantTitle(lockedVariant)}</em>
-                  ) : (
-                    <>Choose Your <em>Poker</em></>
-                  )}
-                </h1>
-                <span className="lobby-choose-ornament" aria-hidden>
-                  <i />
-                  <span>♠</span>
-                  <i />
-                </span>
-              </div>
+            <div className="cr-lobby">
+              <section className="cr-hero-stage">
+                <RoyalSpadeMedallion />
 
-              {showTournamentsInApp() && (
-                <Link className="player-tournament-button player-tournament-entry" to={paths.tournaments}
-                  onClick={() => soundEngine.play('click')}>
-                  <Trophy size={18} aria-hidden="true" /> Tournaments
-                </Link>
-              )}
+                <div className="cr-hero-ribbon">
+                  <div className="cr-hero-eyebrow">
+                    <span aria-hidden>✦</span>
+                    <span>{variantLocked ? 'Welcome to Royal Poker' : 'Select a game'}</span>
+                    <span aria-hidden>✦</span>
+                  </div>
+                  <h1 className="cr-hero-title">
+                    {variantLocked && lockedVariant ? variantTitle(lockedVariant) : 'Choose Your Poker'}
+                  </h1>
+                  <span className="cr-hero-gem" aria-hidden />
+                </div>
 
-              <div className={`variant-cards-row variant-cards-row--five${variantLocked ? ' variant-cards-row--standalone' : ''}`}>
+                {showTournamentsInApp() && (
+                  <Link
+                    className="cr-tournaments-btn"
+                    to={paths.tournaments}
+                    onClick={() => soundEngine.play('click')}
+                  >
+                    <Trophy size={17} aria-hidden="true" />
+                    <span>Tournaments</span>
+                  </Link>
+                )}
+              </section>
+
+              <div className={`cr-variants-grid${variantLocked ? ' cr-variants-grid--single' : ''}`}>
                 {(variantLocked && lockedVariant
                   ? POKER_VARIANT_ART.filter((art) => art.id === lockedVariant)
                   : POKER_VARIANT_ART
@@ -622,177 +644,182 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
           )}
 
           {currentPage === 'CONFIGURE_TABLE' && (
-            <div className="stake-screen">
-              <div className="stake-nav stake-nav--desktop">
+            <div className="cr-setup-shell">
+              <div className="cr-setup-nav cr-setup-nav--desktop">
                 {!variantLocked ? (
-                  <button type="button" className="stake-back" onClick={backToVariants}>
-                    <span className="stake-back-icon" aria-hidden>
-                      <ArrowLeft size={14} strokeWidth={2.75} />
-                    </span>
-                    Change Game
+                  <button type="button" className="cr-setup-back" onClick={backToVariants}>
+                    <ArrowLeft size={14} strokeWidth={2.5} />
+                    <span>Change Game</span>
                   </button>
                 ) : (
-                  <div className="stake-back" style={{ pointerEvents: 'none', opacity: 0.9 }}>
-                    <span className="stake-back-icon" aria-hidden>
-                      <Sparkles size={14} strokeWidth={2.75} />
-                    </span>
-                    {variantTitle(selectedVariant)}
+                  <div className="cr-setup-back" style={{ pointerEvents: 'none', opacity: 0.92 }}>
+                    <Layers size={14} strokeWidth={2.2} />
+                    <span>{variantTitle(selectedVariant)}</span>
                   </div>
                 )}
+                <StepProgressTracker />
                 <StakeNavRight variant={selectedVariant} variantLocked={variantLocked} />
               </div>
 
-              <div className="stake-card">
-                <span className="stake-suit stake-suit-tl">♠</span>
-                <span className="stake-suit stake-suit-tr">♦</span>
-                <span className="stake-suit stake-suit-bl">♣</span>
-                <span className="stake-suit stake-suit-br">♥</span>
+              <div className="cr-setup-card">
+                <span className="cr-corner-spade cr-corner-spade--bl" aria-hidden>♠</span>
+                <span className="cr-corner-spade cr-corner-spade--br" aria-hidden>♠</span>
 
-                <div className="stake-nav stake-nav--mobile">
+                <div className="cr-setup-nav cr-setup-nav--mobile">
                   {!variantLocked ? (
-                    <button type="button" className="stake-back" onClick={backToVariants}>
-                      <span className="stake-back-icon" aria-hidden>
-                        <ArrowLeft size={14} strokeWidth={2.75} />
-                      </span>
-                      Change Game
+                    <button type="button" className="cr-setup-back" onClick={backToVariants}>
+                      <ArrowLeft size={14} strokeWidth={2.5} />
+                      <span>Change Game</span>
                     </button>
                   ) : (
-                    <div className="stake-back" style={{ pointerEvents: 'none', opacity: 0.9 }}>
-                      <span className="stake-back-icon" aria-hidden>
-                        <Sparkles size={14} strokeWidth={2.75} />
-                      </span>
-                      {variantTitle(selectedVariant)}
+                    <div className="cr-setup-back" style={{ pointerEvents: 'none', opacity: 0.92 }}>
+                      <Layers size={14} strokeWidth={2.2} />
+                      <span>{variantTitle(selectedVariant)}</span>
                     </div>
                   )}
+                  <StepProgressTracker />
                   <StakeNavRight variant={selectedVariant} variantLocked={variantLocked} />
                 </div>
 
-                <div className="stake-emblem">
-                  <div className="stake-ribbon">
+                <div className="cr-setup-header">
+                  <SetupHeaderCrest theme={activeArt.theme} />
+                  <div className="cr-setup-ribbon">
                     <h2>{activeTitle.toUpperCase()}</h2>
                     <p>PLAY WITH SKILL</p>
                   </div>
                 </div>
 
-                <div className="stake-players">
-                  <div className="stake-section-label">
-                    <Users size={18} />
-                    Select Players
+                <div className="cr-players-bar">
+                  <div className="cr-players-label">
+                    <UsersRound size={16} color="#f5e6bf" />
+                    <span>Select Players</span>
                   </div>
-                  <div className="stake-player-row">
-                    <button
-                      type="button"
-                      className={`stake-player-btn${selectedPlayers === 2 ? ' on' : ''}`}
-                      onClick={() => {
-                        soundEngine.play('click')
-                        setSelectedPlayers(2)
-                      }}
-                    >
-                      <Users size={18} />
-                      2 Players
-                    </button>
-                    <button
-                      type="button"
-                      className={`stake-player-btn${selectedPlayers === 6 ? ' on' : ''}`}
-                      onClick={() => {
-                        soundEngine.play('click')
-                        setSelectedPlayers(6)
-                      }}
-                    >
-                      <UsersRound size={18} />
-                      6 Players
-                    </button>
-                  </div>
-                </div>
-
-                <div className="stake-values">
-                  <div className="stake-metric">
-                    <div className="stake-metric-head">
-                      <div className="stake-metric-title">
-                        <Layers size={15} />
-                        Blinds
-                      </div>
-                      <div className="stake-metric-sub">Small / big blind</div>
-                    </div>
-                    <StakeStepper
-                      label="blinds"
-                      value={`${formatChipCount(tier.smallBlind)}/${formatChipCount(tier.bigBlind)}`}
-                      minusDisabled={tierIndex <= 0}
-                      plusDisabled={tierIndex >= BLIND_TIERS.length - 1}
-                      onMinus={() => changeTier(tierIndex - 1)}
-                      onPlus={() => changeTier(tierIndex + 1)}
-                    />
-                  </div>
-
-                  <div className="stake-metric">
-                    <div className="stake-metric-head">
-                      <div className="stake-metric-title">
-                        <Coins size={15} />
-                        Buy-in
-                      </div>
-                      <div className="stake-metric-sub">Chips to sit</div>
-                    </div>
-                    <StakeStepper
-                      label="buy-in"
-                      value={`🪙 ${formatChipCount(buyIn)}`}
-                      minusDisabled={tierIndex <= 0}
-                      plusDisabled={tierIndex >= BLIND_TIERS.length - 1}
-                      onMinus={() => changeTier(tierIndex - 1)}
-                      onPlus={() => changeTier(tierIndex + 1)}
-                    />
-                  </div>
-                </div>
-
-                <div className="stake-slider-wrap">
-                  <input
-                    type="range"
-                    min={0}
-                    max={BLIND_TIERS.length - 1}
-                    step={1}
-                    value={tierIndex}
-                    aria-label="Table stakes"
-                    onChange={(event) => changeTier(Number.parseInt(event.target.value, 10))}
-                    className="rummy-slider"
-                    style={{ '--fill': tierFill } as CSSProperties}
-                  />
-                  <div className="stake-range">
-                    <span>
-                      {firstTier.smallBlind}/{firstTier.bigBlind} ({formatChipCount(buyInFor(0))} Buy-in)
-                    </span>
-                    <span>
-                      {formatChipCount(lastTier.smallBlind)}/{formatChipCount(lastTier.bigBlind)} (
-                      {formatChipCount(buyInFor(BLIND_TIERS.length - 1))} Buy-in)
-                    </span>
-                  </div>
-                </div>
-                <div
-                  className="stake-winnings-hint"
-                  style={{ fontSize: 13, color: '#fef08a', fontWeight: 700, marginTop: 10, textAlign: 'center' }}
-                >
-                  🏆 Table pot: up to 🪙 {formatChipCount(buyIn * selectedPlayers)} ({BUY_IN_BIG_BLINDS} big blinds each)
-                </div>
-
-                {errorMsg && <div className="stake-error" role="alert">{errorMsg}</div>}
-
-                <div className="stake-cta-row">
                   <button
                     type="button"
-                    className="stake-play-btn"
+                    className={`cr-seat-btn${selectedPlayers === 2 ? ' on' : ''}`}
                     onClick={() => {
-                      soundEngine.unlock()
-                      soundEngine.playOldClick()
-                      handlePlay()
+                      soundEngine.play('click')
+                      setSelectedPlayers(2)
                     }}
-                    disabled={isMatchmaking || isCreatingRoom || isJoiningRoom}
                   >
-                    <Play size={18} fill="#2a1a06" />
-                    {isMatchmaking ? 'FINDING…' : 'PLAY NOW'}
+                    <Users size={15} />
+                    <span>2 Players</span>
+                    {selectedPlayers === 2 && (
+                      <span className="cr-seat-check" aria-hidden>
+                        <Check size={10} strokeWidth={3.2} />
+                      </span>
+                    )}
                   </button>
+                  <button
+                    type="button"
+                    className={`cr-seat-btn${selectedPlayers === 6 ? ' on' : ''}`}
+                    onClick={() => {
+                      soundEngine.play('click')
+                      setSelectedPlayers(6)
+                    }}
+                  >
+                    <UsersRound size={15} />
+                    <span>6 Players</span>
+                    {selectedPlayers === 6 && (
+                      <span className="cr-seat-check" aria-hidden>
+                        <Check size={10} strokeWidth={3.2} />
+                      </span>
+                    )}
+                  </button>
+                </div>
 
-                  <div className="stake-room-row">
+                <div className="cr-stakes-panel">
+                  <div className="cr-stakes-cols">
+                    <div className="cr-stake-row">
+                      <div className="cr-stake-info">
+                        <Coins size={20} color="#ecc04d" style={{ flexShrink: 0 }} />
+                        <div className="cr-stake-info-text">
+                          <strong>Blinds</strong>
+                          <span>Small / Big blind</span>
+                        </div>
+                      </div>
+                      <StakeStepper
+                        label="blinds"
+                        value={`${formatChipCount(tier.smallBlind)}/${formatChipCount(tier.bigBlind)}`}
+                        minusDisabled={tierIndex <= 0}
+                        plusDisabled={tierIndex >= BLIND_TIERS.length - 1}
+                        onMinus={() => changeTier(tierIndex - 1)}
+                        onPlus={() => changeTier(tierIndex + 1)}
+                      />
+                    </div>
+
+                    <div className="cr-stake-row">
+                      <div className="cr-stake-info">
+                        <Coins size={20} color="#ecc04d" style={{ flexShrink: 0 }} />
+                        <div className="cr-stake-info-text">
+                          <strong>Buy-in</strong>
+                          <span>Chips to sit</span>
+                        </div>
+                      </div>
+                      <StakeStepper
+                        label="buy-in"
+                        value={`🪙 ${formatChipCount(buyIn)}`}
+                        minusDisabled={tierIndex <= 0}
+                        plusDisabled={tierIndex >= BLIND_TIERS.length - 1}
+                        onMinus={() => changeTier(tierIndex - 1)}
+                        onPlus={() => changeTier(tierIndex + 1)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="cr-slider-block">
+                    <input
+                      type="range"
+                      min={0}
+                      max={BLIND_TIERS.length - 1}
+                      step={1}
+                      value={tierIndex}
+                      aria-label="Table stakes"
+                      onChange={(event) => changeTier(Number.parseInt(event.target.value, 10))}
+                      className="cr-slider"
+                      style={{ '--fill': tierFill } as CSSProperties}
+                    />
+                    <div className="cr-slider-bounds">
+                      <span>
+                        {firstTier.smallBlind}/{firstTier.bigBlind} ({formatChipCount(buyInFor(0))} Buy-in)
+                      </span>
+                      <span>
+                        {formatChipCount(lastTier.smallBlind)}/{formatChipCount(lastTier.bigBlind)} (
+                        {formatChipCount(buyInFor(BLIND_TIERS.length - 1))} Buy-in)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cr-pot-pill">
+                  🏆 Table pot: up to <strong>🪙 {formatChipCount(buyIn * selectedPlayers)}</strong> ({BUY_IN_BIG_BLINDS} big blinds each)
+                </div>
+
+                {errorMsg && <div className="cr-error" role="alert">{errorMsg}</div>}
+
+                <div className="cr-actions">
+                  <div className="cr-play-stage">
+                    <LaurelSprig side="left" />
                     <button
                       type="button"
-                      className="stake-create-btn"
+                      className="cr-btn-play"
+                      onClick={() => {
+                        soundEngine.unlock()
+                        soundEngine.playOldClick()
+                        handlePlay()
+                      }}
+                      disabled={isMatchmaking || isCreatingRoom || isJoiningRoom}
+                    >
+                      <Play size={16} fill="#191103" />
+                      {isMatchmaking ? 'FINDING…' : 'PLAY NOW'}
+                    </button>
+                    <LaurelSprig side="right" />
+                  </div>
+
+                  <div className="cr-actions-sub">
+                    <button
+                      type="button"
+                      className="cr-btn-emerald"
                       onClick={() => {
                         soundEngine.unlock()
                         soundEngine.play('click')
@@ -800,12 +827,12 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                       }}
                       disabled={isMatchmaking || isCreatingRoom || isJoiningRoom}
                     >
-                      <DoorOpen size={18} />
+                      <DoorOpen size={15} />
                       {isCreatingRoom ? 'CREATING…' : 'CREATE ROOM'}
                     </button>
                     <button
                       type="button"
-                      className="stake-join-btn"
+                      className="cr-btn-emerald"
                       onClick={() => {
                         soundEngine.unlock()
                         soundEngine.play('click')
@@ -814,20 +841,14 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                       }}
                       disabled={isMatchmaking || isCreatingRoom || isJoiningRoom}
                     >
-                      <KeyRound size={18} />
+                      <Link2 size={15} />
                       JOIN ROOM
                     </button>
                   </div>
                 </div>
 
-                <div className="stake-summary">
-                  Blinds {formatChipCount(tier.smallBlind)}/{formatChipCount(tier.bigBlind)} · {selectedPlayers} Players Table ·
-                  Buy-in 🪙{formatChipCount(buyIn)}
-                  <br />
-                  <span className="stake-summary-hint">
-                    Select 2 or 6 players · Create Room code · friends join · min 2 to start
-                    {selectedPlayers === 2 ? ' · 2P starts when both sit' : ' · 6P fills then auto-starts'}
-                  </span>
+                <div className="cr-footnote">
+                  Blinds {formatChipCount(tier.smallBlind)}/{formatChipCount(tier.bigBlind)} &nbsp;•&nbsp; {selectedPlayers} Players Table &nbsp;•&nbsp; Buy-in <strong>🪙 {formatChipCount(buyIn)}</strong>
                 </div>
               </div>
             </div>
@@ -835,34 +856,32 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
         </main>
 
         {joinOpen && (
-          <div className="mm-overlay" role="dialog" aria-label="Join room">
-            <div className="stake-card mm-card join-room-card">
-              <span className="stake-suit stake-suit-tl">♠</span>
-              <span className="stake-suit stake-suit-tr">♦</span>
-              <span className="stake-suit stake-suit-bl">♣</span>
-              <span className="stake-suit stake-suit-br">♥</span>
-              <button
-                type="button"
-                className="join-room-close"
-                aria-label="Close"
-                onClick={() => {
-                  soundEngine.play('click')
-                  setJoinOpen(false)
-                  setErrorMsg(null)
-                }}
-              >
-                <X size={18} />
-              </button>
-              <div className="stake-ribbon mm-ribbon">
-                <h2>JOIN ROOM</h2>
-                <p>ENTER THE HOST&apos;S CODE</p>
+          <div className="cr-overlay" role="dialog" aria-label="Join room">
+            <div className="cr-modal">
+              <div className="cr-modal-head">
+                <div>
+                  <h2>JOIN ROOM</h2>
+                  <p>ENTER THE HOST&apos;S CODE</p>
+                </div>
+                <button
+                  type="button"
+                  className="cr-icon-close"
+                  aria-label="Close"
+                  onClick={() => {
+                    soundEngine.play('click')
+                    setJoinOpen(false)
+                    setErrorMsg(null)
+                  }}
+                >
+                  <X size={16} />
+                </button>
               </div>
-              <label className="join-room-label" htmlFor="join-room-code">
+              <label className="cr-code-label" htmlFor="join-room-code">
                 Room code
               </label>
               <input
                 id="join-room-code"
-                className="join-room-input"
+                className="cr-code-input"
                 value={joinCode}
                 autoFocus
                 autoComplete="off"
@@ -875,21 +894,21 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                 }}
               />
               {errorMsg && (
-                <div className="stake-error" role="alert" style={{ marginTop: 10 }}>
+                <div className="cr-error" role="alert">
                   {errorMsg}
                 </div>
               )}
               <button
                 type="button"
-                className="stake-play-btn"
-                style={{ marginTop: 16, maxWidth: '100%' }}
+                className="cr-btn-primary"
+                style={{ width: '100%' }}
                 disabled={isJoiningRoom || joinCode.trim().length < 4}
                 onClick={() => {
                   soundEngine.play('click')
                   void handleJoinRoom()
                 }}
               >
-                <KeyRound size={18} />
+                <KeyRound size={16} />
                 {isJoiningRoom ? 'JOINING…' : 'JOIN TABLE'}
               </button>
             </div>
@@ -897,7 +916,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
         )}
 
         {isMatchmaking && (
-          <div className="mm-overlay" role="dialog" aria-label="Finding table">
+          <div className="cr-overlay" role="dialog" aria-label="Finding table">
             <div
               style={{
                 position: 'absolute',
@@ -912,39 +931,35 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
               <SoundToggle compact />
               <FullscreenToggle compact />
             </div>
-            <div className="stake-card mm-card">
-              <span className="stake-suit stake-suit-tl">♠</span>
-              <span className="stake-suit stake-suit-tr">♦</span>
-              <span className="stake-suit stake-suit-bl">♣</span>
-              <span className="stake-suit stake-suit-br">♥</span>
-
+            <div className="cr-modal">
               {rematchNotice && <div className="mm-rematch-note">Rematch started — same table settings</div>}
 
-              <div className="stake-ribbon mm-ribbon">
-                <h2>FINDING TABLE</h2>
-                <p>
-                  {activeTitle.toUpperCase()} · {selectedPlayers} PLAYERS
-                </p>
+              <div className="cr-setup-head">
+                <div>
+                  <h2>FINDING TABLE</h2>
+                  <p className="cr-setup-sub">
+                    {activeTitle.toUpperCase()} · {selectedPlayers} PLAYERS
+                  </p>
+                </div>
+                <span className="cr-setup-badge">QUEUE</span>
               </div>
 
-              <div className={`mm-search${mmQueueTime < 15 ? '' : ' mm-search--ready'}`} aria-hidden>
-                <div className="mm-orbit">
-                  <span className="mm-orbit-ring" />
-                  <span className="mm-orbit-sweep" />
-                  <span className="mm-orbit-core">
-                    <Users size={16} />
-                  </span>
-                </div>
-                <div className="mm-seats">
-                  {Array.from({ length: selectedPlayers }, (_, seat) => (
-                    <span
-                      key={seat}
-                      className={`mm-seat${seat === 0 || mmQueueTime >= 15 ? ' on' : ''}${
-                        mmQueueTime < 15 && seat === mmQueueTime % selectedPlayers ? ' pulse' : ''
-                      }`}
-                    />
-                  ))}
-                </div>
+              <div className="cr-search-ring" aria-hidden>
+                <span className="cr-search-track" />
+                <span className="cr-search-arc" />
+                <span className="cr-search-core">
+                  <Users size={16} />
+                </span>
+              </div>
+              <div className="cr-search-dots" aria-hidden>
+                {Array.from({ length: selectedPlayers }, (_, seat) => (
+                  <span
+                    key={seat}
+                    className={`cr-search-dot${seat === 0 || mmQueueTime >= 15 ? ' on' : ''}${
+                      mmQueueTime < 15 && seat === mmQueueTime % selectedPlayers ? ' pulse' : ''
+                    }`}
+                  />
+                ))}
               </div>
 
               <div className="mm-status">
@@ -956,34 +971,28 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                 </span>
               </div>
 
-              <div className="stake-values mm-metrics">
-                <div className="stake-metric">
-                  <div className="stake-metric-head">
-                    <div className="stake-metric-title">
-                      <Layers size={15} />
-                      Blinds
-                    </div>
-                    <div className="stake-metric-sub">Small / big</div>
+              <div className="cr-stakes-grid">
+                <div className="cr-stake-box">
+                  <div className="cr-stake-top">
+                    <strong>Blinds</strong>
+                    <span>Small / big</span>
                   </div>
-                  <div className="mm-metric-value">
+                  <div className="cr-step-val">
                     {formatChipCount(tier.smallBlind)}/{formatChipCount(tier.bigBlind)}
                   </div>
                 </div>
-                <div className="stake-metric">
-                  <div className="stake-metric-head">
-                    <div className="stake-metric-title">
-                      <Users size={15} />
-                      Table
-                    </div>
-                    <div className="stake-metric-sub">Seats</div>
+                <div className="cr-stake-box">
+                  <div className="cr-stake-top">
+                    <strong>Table</strong>
+                    <span>Seats</span>
                   </div>
-                  <div className="mm-metric-value">{selectedPlayers}P</div>
+                  <div className="cr-step-val">{selectedPlayers}P</div>
                 </div>
               </div>
 
-              <div className="stake-summary">Buy-in: 🪙{formatChipCount(buyIn)} play chips</div>
+              <div className="cr-summary-note">Buy-in: 🪙{formatChipCount(buyIn)} play chips</div>
 
-              <button type="button" className="mm-cancel-btn" onClick={() => void handleCancel()}>
+              <button type="button" className="cr-cancel-btn" onClick={() => void handleCancel()}>
                 <X size={16} strokeWidth={2.5} />
                 Cancel Search
               </button>
@@ -994,7 +1003,7 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
         {currentPage === 'SELECT_VARIANT' && !isMatchmaking && (
           <button
             type="button"
-            className="lobby-character-fab"
+            className="cr-avatar-fab"
             onClick={() => {
               soundEngine.play('click')
               setCharacterOpen(true)
@@ -1002,29 +1011,24 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
             title="Choose character"
             aria-label="Choose character"
           >
-            <div className="character-fab-avatar-wrap">
-              <img src={photoForCharacter(avatarId)} alt="Character" className="character-fab-avatar" draggable={false} />
-              <div className="character-fab-badge" aria-hidden="true">
-                <Sparkles size={10} strokeWidth={2.5} />
-              </div>
-            </div>
-            <span className="character-fab-label">Choose character</span>
+            <img src={photoForCharacter(avatarId)} alt="Character" draggable={false} />
+            <span>Choose character</span>
           </button>
         )}
 
         {characterOpen && (
-          <div className="character-picker-backdrop" onClick={() => setCharacterOpen(false)}>
+          <div className="cr-overlay" onClick={() => setCharacterOpen(false)}>
             <div
-              className="character-picker"
+              className="cr-avatar-dialog"
               role="dialog"
               aria-label="Choose character"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="character-picker-head">
+              <div className="cr-modal-head">
                 <h2>Choose character</h2>
                 <button
                   type="button"
-                  className="character-picker-close"
+                  className="cr-icon-close"
                   onClick={() => setCharacterOpen(false)}
                   aria-label="Close"
                 >
@@ -1032,14 +1036,14 @@ export function LobbyScreen({ initialVariant }: LobbyScreenProps) {
                 </button>
               </div>
               {(['boy', 'girl'] as const).map((group) => (
-                <section key={group} className="character-picker-group">
+                <section key={group} className="cr-avatar-group">
                   <h3>{group === 'boy' ? 'Boys' : 'Girls'}</h3>
-                  <div className="character-picker-grid">
+                  <div className="cr-avatar-grid">
                     {PLAYER_CHARACTERS.filter((character) => character.group === group).map((character) => (
                       <button
                         key={character.id}
                         type="button"
-                        className={`character-picker-face${character.id === avatarId ? ' on' : ''}`}
+                        className={`cr-avatar-cell${character.id === avatarId ? ' on' : ''}`}
                         aria-label={character.id}
                         aria-pressed={character.id === avatarId}
                         onClick={() => {

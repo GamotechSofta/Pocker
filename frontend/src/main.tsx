@@ -5,6 +5,7 @@ import { lockedVariantTitle } from './config/variantApp'
 import './index.css'
 import './styles/royal.css'
 import './styles/royal-poker.css'
+import './styles/cardroom.css'
 import { installSoundUnlock } from './audio/soundEngine'
 
 installSoundUnlock()

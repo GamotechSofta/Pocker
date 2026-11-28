@@ -86,140 +86,43 @@ export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalPro
   }
 
   return (
-    <div
-      className="wallet-modal-backdrop"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(3, 7, 18, 0.88)',
-        backdropFilter: 'blur(16px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        padding: '16px',
-      }}
-    >
+    <div className="wallet-modal-backdrop cr-wallet-backdrop">
       <div
-        className="wallet-modal-card"
+        className="wallet-modal-card cr-wallet-card"
         onClick={(event) => event.stopPropagation()}
         onWheel={modalScroll.onWheel}
         onTouchStart={modalScroll.onTouchStart}
         onTouchMove={modalScroll.onTouchMove}
-        style={{
-          background: 'linear-gradient(170deg, #1e293b 0%, #0f172a 60%, #020617 100%)',
-          border: '1.5px solid rgba(212, 175, 55, 0.45)',
-          borderRadius: '24px',
-          width: '100%',
-          maxWidth: '520px',
-          maxHeight: 'min(92dvh, calc(100% - 16px), 640px)',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.85), 0 0 45px rgba(212, 175, 55, 0.15)',
-          color: '#fff',
-          overflow: 'hidden',
-        }}
       >
-        <div
-          style={{
-            padding: '16px 22px',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(212, 175, 55, 0.06)',
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
-              }}
-            >
-              <Coins size={22} strokeWidth={2.5} />
+        <div className="cr-wallet-head">
+          <div className="cr-wallet-title">
+            <div className="cr-wallet-icon">
+              <Coins size={20} strokeWidth={2.2} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: '#f8fafc' }}>Wallet</h3>
-              <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>{launch ? `${launch.currency} · operator wallet` : 'INR (₹) · play-money bankroll'}</p>
+              <h3>Wallet</h3>
+              <p>{launch ? `${launch.currency} · operator wallet` : 'INR (₹) · play-money bankroll'}</p>
             </div>
           </div>
           <button
             type="button"
+            className="cr-icon-close"
+            aria-label="Close wallet"
             onClick={onClose}
-            style={{
-              background: 'rgba(255,255,255,0.06)',
-              border: 'none',
-              borderRadius: '50%',
-              width: '32px',
-              height: '32px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#94a3b8',
-              cursor: 'pointer',
-            }}
           >
             <X size={16} />
           </button>
         </div>
 
         <div
-          className="wallet-modal-body"
+          className="wallet-modal-body cr-wallet-body"
           onWheel={modalScroll.onWheel}
           onTouchStart={modalScroll.onTouchStart}
           onTouchMove={modalScroll.onTouchMove}
-          style={{
-            padding: '20px 22px',
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            minHeight: 0,
-            flex: '1 1 auto',
-          }}
         >
-          <div
-            style={{
-              background: 'radial-gradient(ellipse at 50% 20%, #7f1d1d 0%, #450a0a 70%, #1c0303 100%)',
-              border: '1px solid rgba(212, 175, 55, 0.4)',
-              borderRadius: '18px',
-              padding: '18px 20px',
-              textAlign: 'center',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                color: '#fca5a5',
-                textTransform: 'uppercase',
-                letterSpacing: '0.8px',
-              }}
-            >
-              Available Balance
-            </div>
-            <div
-              style={{
-                fontSize: '32px',
-                fontWeight: 900,
-                color: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                margin: '6px 0 4px 0',
-              }}
-            >
+          <div className="cr-wallet-summary">
+            <div className="cr-wallet-label">Available Balance</div>
+            <div className="cr-wallet-figure">
               <span>
                 {balance === null
                   ? '—'
@@ -228,120 +131,59 @@ export function WalletModal({ isOpen, onClose, onBalanceChange }: WalletModalPro
             </div>
             <button
               type="button"
+              className="cr-wallet-refresh"
               onClick={() => void fetchWallet()}
               disabled={loading}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#fca5a5',
-                fontSize: '11px',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
             >
               <RefreshCw size={12} /> {loading ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
 
-          {error && (
-            <div
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid #ef4444',
-                borderRadius: '10px',
-                padding: '10px 14px',
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#fca5a5',
-                textAlign: 'center',
-              }}
-            >
-              {error}
-            </div>
-          )}
+          {error && <div className="cr-error" role="alert">{error}</div>}
 
-          {!launch && <button
-            type="button"
-            disabled={adding}
-            onClick={() => void handleAddCash()}
-            style={{
-              width: '100%',
-              padding: '14px',
-              borderRadius: '14px',
-              border: 'none',
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              color: '#ffffff',
-              fontSize: '16px',
-              fontWeight: 900,
-              cursor: adding ? 'wait' : 'pointer',
-              opacity: adding ? 0.7 : 1,
-              boxShadow: '0 6px 20px rgba(16, 185, 129, 0.35)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-            }}
-          >
-            <PlusCircle size={18} /> {adding ? 'Adding…' : `Add Cash ₹${addCashAmount.toLocaleString('en-IN')}`}
-          </button>}
-          <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', marginTop: '-8px' }}>
+          {!launch && (
+            <button
+              type="button"
+              className="cr-btn-primary"
+              style={{ width: '100%' }}
+              disabled={adding}
+              onClick={() => void handleAddCash()}
+            >
+              <PlusCircle size={18} /> {adding ? 'Adding…' : `Add Cash ₹${addCashAmount.toLocaleString('en-IN')}`}
+            </button>
+          )}
+          <div className="cr-wallet-note">
             {launch ? 'Manage deposits and withdrawals through your operator lobby.' : 'Play-money top-up. Buy-ins are escrowed when you join a table and cashed out when you leave.'}
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(16, 185, 129, 0.08)',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
-              borderRadius: '10px',
-              padding: '10px 14px',
-              fontSize: '12px',
-              color: '#34d399',
-            }}
-          >
-            <ShieldCheck size={18} color="#10b981" style={{ flexShrink: 0 }} />
+          <div className="cr-wallet-shield">
+            <ShieldCheck size={17} style={{ flexShrink: 0, color: 'var(--cr-brass)' }} />
             <span>Every buy-in, rebuy, and cash-out is recorded once with an idempotent transaction id.</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <History size={15} /> Recent Game Transactions
+            <div className="cr-wallet-tx-head">
+              <History size={14} /> Recent Game Transactions
             </div>
-            <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div className="cr-wallet-tx-list">
               {transactions.length === 0 ? (
-                <div style={{ fontSize: '12px', color: '#64748b', textAlign: 'center', padding: '12px' }}>
+                <div className="cr-wallet-tx-empty">
                   No transactions yet.
                 </div>
               ) : (
                 transactions.slice(0, 20).map((t) => {
                   const positive = isCredit(t.transactionType)
                   return (
-                    <div
-                      key={t.id || t.idempotencyKey}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        background: 'rgba(0,0,0,0.3)',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(255,255,255,0.04)',
-                        fontSize: '12px',
-                      }}
-                    >
+                    <div key={t.id || t.idempotencyKey} className="cr-wallet-tx-row">
                       <div>
-                        <div style={{ fontWeight: 700, color: '#f8fafc' }}>
+                        <div className="cr-wallet-tx-title">
                           {TYPE_LABELS[t.transactionType] ?? t.transactionType}
                         </div>
-                        <div style={{ fontSize: '10px', color: '#64748b' }}>
+                        <div className="cr-wallet-tx-time">
                           {t.createdAt ? new Date(t.createdAt).toLocaleString('en-IN') : t.description}
                         </div>
                       </div>
-                      <div style={{ fontWeight: 900, color: positive ? '#34d399' : '#f87171' }}>
+                      <div className={`cr-wallet-tx-amt ${positive ? 'is-credit' : 'is-debit'}`}>
                         {positive ? '+' : '-'} {formatWalletAmount(Math.abs(Number(t.amount)), { currency: t.currency || launch?.currency || 'INR', lang: launch?.lang ?? 'en-IN' })}
                       </div>
                     </div>
